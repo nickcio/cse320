@@ -42,22 +42,26 @@ int validargs(int argc, char **argv) {
                 if(*(cchar-1) == '-'){
                     if(*(cchar+1) == '\0') {
                         if(*cchar == 'h') {
-                            printf("Help Win");
+                            if(argcount >= 2) {
+                                global_options=0x0;
+                                return -1;
+                            }
+                            //printf("Help Win");
                             global_options=0x1;
                             return 0;
                         }
                         else if(*cchar == 'n') {
-                            printf("N");
+                            //printf("N");
                             if((global_options & 0x2) != 0x0) {
                                 global_options = 0x0;
-                                printf("N FAIL");
+                                //printf("N FAIL");
                                 return -1;
                             }
                             global_options=global_options | 0x2;
-                            printf("N PASS");
+                            //printf("N PASS");
                         }
                         else if(*cchar == 'q') {
-                            printf("Q");
+                            //printf("Q");
                             if((global_options & 0x4) != 0x0) {
                                 global_options = 0x0;
                                 return -1;
@@ -65,25 +69,25 @@ int validargs(int argc, char **argv) {
                             global_options=global_options | 0x4;
                         }
                         else{
-                            printf(" G FAIL");
+                            //printf(" G FAIL");
                             global_options=0x0;
                             return -1;
                         }
                         if(argcount == argc-1) {
-                            printf("INVALID");
+                            //printf("INVALID");
                             global_options=0x0;
                             return -1;
                         }
                     }
                     else {
-                        printf("Help fail");
+                        //printf("Help fail");
                         global_options=0x0;
                         return -1;
                     }
                 }
             }
             else if(argcount != argc-1) {
-                printf("INVALID2");
+                //printf("INVALID2");
                 global_options=0x0;
                 return -1;
             }
@@ -94,7 +98,7 @@ int validargs(int argc, char **argv) {
                 }
                 //printf("FOUND LAST");
             }
-            printf("%c", *cchar);
+            //printf("%c", *cchar);
             charcount++;
         }
         if(argcount == argc-1) {
@@ -102,7 +106,7 @@ int validargs(int argc, char **argv) {
                 global_options=0x0;
                 return -1;
             }
-            printf("Filename: %s",*currarg);
+            //printf("Filename: %s",*currarg);
             diff_filename  = *currarg;
             return 0;
         }
