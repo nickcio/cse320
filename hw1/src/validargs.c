@@ -52,20 +52,11 @@ int validargs(int argc, char **argv) {
                         }
                         else if(*cchar == 'n') {
                             //printf("N");
-                            if((global_options & 0x2) != 0x0) {
-                                global_options = 0x0;
-                                //printf("N FAIL");
-                                return -1;
-                            }
                             global_options=global_options | 0x2;
                             //printf("N PASS");
                         }
                         else if(*cchar == 'q') {
                             //printf("Q");
-                            if((global_options & 0x4) != 0x0) {
-                                global_options = 0x0;
-                                return -1;
-                            }
                             global_options=global_options | 0x4;
                         }
                         else{
@@ -117,5 +108,4 @@ int validargs(int argc, char **argv) {
         currarg++;
     }
     return 0;
-    abort();
 }
