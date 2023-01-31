@@ -76,7 +76,7 @@ int hunk_next(HUNK *hp, FILE *in) {
                     in_num = 0;
                 }
                 else{
-                    if((type == 1 && firstin1 != lastin1) || (type == 2 && firstin2 != lastin2)) {
+                    if((type == 1 && firstin1 != lastin1) || (type == 2 && firstin2 != lastin2) || lastin1 < firstin1 || lastin2 < firstin2) {
                         fprintf(stderr,"Conflict: %d %d %d %d %d\n",type,firstin1,lastin1,firstin2,lastin2);
                     }
                     else {
