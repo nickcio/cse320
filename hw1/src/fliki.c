@@ -19,10 +19,99 @@
  * from the input stream, or ERR if the data in the input stream
  * could not be properly interpreted as a hunk.
  */
+static int line_start = 1;
+static int serial = 0;
 
 int hunk_next(HUNK *hp, FILE *in) {
-    // TO BE IMPLEMENTED
-    abort();
+    FILE* temp = in;
+    char curr;
+    int index = 0;
+
+    int in_num = 0;
+    int type = 0;
+    int firstin1 = -1;
+    int lastin1 = -1;
+    int firstin2 = -1;
+    int lastin2 = -1;
+
+    while(curr != EOF){
+        curr = fgetc(temp);
+        if(line_start || in_num) {
+            int num = curr-48;
+            if(num >= 0 && num <= 9) {
+                in_num = 1;
+                index *= 10;
+                index += num;
+                //fprintf(stderr,"Num: %d, Index: %d .",num,index);
+            }
+            else if(curr == ',' && in_num) {
+                if(firstin1 == -1) {
+                    firstin1 = index;
+                    //fprintf(stderr,"Firstin1: %d ", firstin1);
+                }
+                else if(firstin2 == -1) {
+                    firstin2 = index;
+                    //fprintf(stderr,"Firstin2: %d ", firstin2);
+                }
+                index = 0;
+            }
+            else if((curr == 'a' || curr == 'd' || curr == 'c') && in_num) {
+                type = curr == 'a' ? 1 : curr == 'd' ? 2 : curr == 'c' ? 3 : 0;
+                if(lastin1 == -1) {
+                    lastin1 = index;
+                    firstin1 = firstin1 == -1 ? lastin1 : firstin1;
+                    //fprintf(stderr,"Firstin1: %d ", firstin1);
+                }
+                else if(lastin1 != -1 || firstin2 != -1 || lastin2 != -1) {
+                    in_num = 0;
+                }
+                index = 0;
+            }
+            else if(curr == '\n' && in_num) {
+                if(lastin2 == -1) {
+                    lastin2 = index;
+                    firstin2 = firstin2 == -1 ? lastin2 : firstin2;
+                }
+                if(lastin1 == -1 || firstin1 == -1) {
+                    in_num = 0;
+                }
+                else{
+                    if((type == 1 && firstin1 != lastin1) || (type == 2 && firstin2 != lastin2)) {
+                        fprintf(stderr,"Conflict: %d %d %d %d %d\n",type,firstin1,lastin1,firstin2,lastin2);
+                    }
+                    else {
+                        serial++;
+                        (*hp).serial = serial;
+                        (*hp).old_start = firstin1;
+                        (*hp).old_end = lastin1 >= 0 ? lastin1 : firstin1;
+                        (*hp).new_start = firstin2;
+                        (*hp).new_end = lastin2 >= 0 ? lastin2 : firstin2;
+                        (*hp).type = type == 1 ? HUNK_APPEND_TYPE : type == 2 ? HUNK_DELETE_TYPE : type == 3 ? HUNK_CHANGE_TYPE: HUNK_NO_TYPE;
+                        return 0;
+                    }
+                }
+                line_start = 1;
+                in_num = 0;
+                type = 0;
+                firstin1 = -1;
+                lastin1 = -1;
+                firstin2 = -1;
+                lastin2 = -1;
+                index = 0;
+            }
+            else{
+                line_start = 0;
+                index = 0;
+            }
+        }
+        else if(curr == '\n'){
+            line_start = 1;     
+            //fprintf(stderr,"Line break");       
+        }
+        //fprintf(stderr,"%c ",curr);
+        
+    }
+    return -1;
 }
 
 /**
@@ -147,6 +236,25 @@ void hunk_show(HUNK *hp, FILE *out) {
  */
 
 int patch(FILE *in, FILE *out, FILE *diff) {
-    // TO BE IMPLEMENTED
-    abort();
+    char cchar;
+    FILE* temp = in;
+    //printf("GUm");
+    //while(cchar != EOF) {
+    //    printf("J");
+    //    cchar = fgetc(temp);
+    //    fprintf(out,"%c",cchar);
+    //}
+    //printf("after");
+    HUNK hunk;
+    HUNK* curr = &hunk;
+    while(hunk_next(curr,in) == 0) {
+        fprintf(stderr,"HUNK STATS: ");
+        fprintf(stderr," %d ",(*curr).type);
+        fprintf(stderr," %d ",(*curr).serial);
+        fprintf(stderr," %d ",(*curr).old_start);
+        fprintf(stderr," %d ",(*curr).old_end);
+        fprintf(stderr," %d ",(*curr).new_start);
+        fprintf(stderr," %d \n",(*curr).new_end);
+    }
+    return 0;
 }

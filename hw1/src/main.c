@@ -20,10 +20,17 @@
 int main(int argc, char **argv)
 {
     if(validargs(argc, argv))
-        USAGE(*argv, EXIT_FAILURE);
+       USAGE(*argv, EXIT_FAILURE);
     if(global_options == HELP_OPTION)
-        USAGE(*argv, EXIT_SUCCESS);
-    // TO BE IMPLEMENTED
+       USAGE(*argv, EXIT_SUCCESS);
+    FILE* output = stdout;
+    if((global_options & NO_PATCH_OPTION) == NO_PATCH_OPTION) {
+        fclose(stdout);
+        output = stderr;
+    }
+    FILE* diff_file = fopen(diff_filename,"r");
+    patch(stdin,output,diff_file);
+
     return EXIT_FAILURE; 
 }
 
