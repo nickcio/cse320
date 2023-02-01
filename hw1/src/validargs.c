@@ -36,6 +36,10 @@ int validargs(int argc, char **argv) {
             if(charcount == 0) {
                 if(*cchar == '-'){
                     isflag = 1;
+                    if(*(cchar+1) == '\0') {
+                        global_options=0x0;
+                        return -1;
+                    }
                 }
             }
             else if(charcount == 1) {
