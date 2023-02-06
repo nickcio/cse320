@@ -23,7 +23,7 @@ static int line_start = 1;
 static int serial = 0;
 
 int hunk_next(HUNK *hp, FILE *in) {
-    FILE* temp = in;
+    FILE *temp = in;
     char curr;
     int index = 0;
 
@@ -64,6 +64,7 @@ int hunk_next(HUNK *hp, FILE *in) {
                 }
                 else if(lastin1 != -1 || firstin2 != -1 || lastin2 != -1) {
                     in_num = 0;
+                    return ERR;
                 }
                 index = 0;
             }
@@ -74,10 +75,11 @@ int hunk_next(HUNK *hp, FILE *in) {
                 }
                 if(lastin1 == -1 || firstin1 == -1) {
                     in_num = 0;
+                    return ERR;
                 }
                 else{
                     if((type == 1 && firstin1 != lastin1) || (type == 2 && firstin2 != lastin2) || lastin1 < firstin1 || lastin2 < firstin2) {
-                        fprintf(stderr,"Conflict: %d %d %d %d %d\n",type,firstin1,lastin1,firstin2,lastin2);
+                        return ERR;
                     }
                     else {
                         serial++;
@@ -99,8 +101,51 @@ int hunk_next(HUNK *hp, FILE *in) {
                 lastin2 = -1;
                 index = 0;
             }
+            else if(curr == EOF && in_num) {
+                //fprintf(stderr,"DONE");
+                return ERR;
+            }
             else{
                 line_start = 0;
+                if(in_num == 0) {
+                    if(curr == '-') {
+                        if(fgetc(temp) == '-') {
+                            if(fgetc(temp) == '-') {
+                                if(fgetc(temp) == '\n'){
+                                    line_start = 1;
+                                }
+                                else{
+                                    //fprintf(stderr,"E 1");
+                                    return ERR;
+                                }
+                            }
+                            else{
+                                //fprintf(stderr,"E 1");
+                                return ERR;
+                            }
+                        }
+                        else{
+                            //fprintf(stderr,"E 1");
+                            return ERR;
+                        }
+                    }
+                    else if(curr == '>' || curr == '<') {
+                        if(fgetc(temp) == ' ') {
+                            line_start = 0;
+                        }
+                        else{
+                            //fprintf(stderr,"E 2");
+                            return ERR;
+                        }
+                    }
+                    else{
+                        //fprintf(stderr,"E 3");
+                        if(curr == EOF) {
+                            return EOF;
+                        }
+                        return ERR;
+                    }
+                }
                 index = 0;
             }
         }
@@ -111,7 +156,7 @@ int hunk_next(HUNK *hp, FILE *in) {
         //fprintf(stderr,"%c ",curr);
         
     }
-    return -1;
+    return EOF;
 }
 
 /**
@@ -237,7 +282,6 @@ void hunk_show(HUNK *hp, FILE *out) {
 
 int patch(FILE *in, FILE *out, FILE *diff) {
     char cchar;
-    FILE* temp = in;
     //printf("GUm");
     //while(cchar != EOF) {
     //    printf("J");
@@ -247,8 +291,12 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     //printf("after");
     HUNK hunk;
     HUNK* curr = &hunk;
-    while(hunk_next(curr,in) == 0) {
-        fprintf(stderr,"HUNK STATS: ");
+    int nextval;
+    while((nextval = hunk_next(curr,in)) != EOF) {
+        if(nextval == ERR) {
+            fprintf(stderr,"Error %d", fgetc(in));
+        }
+        fprintf(stderr,"HUNK STATS: %d ",nextval);
         fprintf(stderr," %d ",(*curr).type);
         fprintf(stderr," %d ",(*curr).serial);
         fprintf(stderr," %d ",(*curr).old_start);
