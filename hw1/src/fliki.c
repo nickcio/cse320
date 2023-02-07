@@ -21,6 +21,9 @@
  */
 static int line_start = 1;
 static int serial = 0;
+static int linebreaks = 0;
+static int prevwasn = 0;
+static int very_previous_char = 0;
 
 int hunk_next(HUNK *hp, FILE *in) {
     FILE *temp = in;
@@ -33,11 +36,12 @@ int hunk_next(HUNK *hp, FILE *in) {
     int lastin1 = -1;
     int firstin2 = -1;
     int lastin2 = -1;
-    //fprintf(stderr,"Start");
+    //fprintf(stderr,"LASTCHAR INITIALIZED \n");
     while(curr != EOF){
         //fprintf(stderr,"MILESTONE");
         //fprintf(stderr,"%c",curr);
         curr = fgetc(temp);
+        very_previous_char = curr != EOF ? curr : very_previous_char;
         if(line_start || in_num) {
             int num = curr-48;
             //fprintf(stderr,"MILESTONE2 %c %d", curr,curr);
@@ -156,6 +160,7 @@ int hunk_next(HUNK *hp, FILE *in) {
         }
         else if(curr == '\n'){
             line_start = 1;     
+            linebreaks++;
             //fprintf(stderr,"Line break");       
         }
         else{
@@ -163,7 +168,12 @@ int hunk_next(HUNK *hp, FILE *in) {
         }
         //fprintf(stderr,"%c ",curr);
         
+        //lastbefore = lastchar;
+        //lastchar = curr;
+        //fprintf(stderr,"SETTING LAST CHAR! %c %d\n", lastchar, lastchar);
     }
+    very_previous_char = curr != EOF ? curr : very_previous_char;
+    //fprintf(stderr,"EDONE %c %c END\n", lastchar, lastbefore);
     return EOF;
 }
 
@@ -344,7 +354,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
     }
-
+    very_previous_char = thischar;
     //fprintf(stderr,"AT END %c",thischar);
     return thischar;
 }
@@ -444,9 +454,13 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     HUNK* curr = &hunk;
     int nextval;
     int getval;
+    int hunklen = 0;
+    int lines_count;
+    linebreaks = 0;
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
             fprintf(stderr,"Error %d !!!", nextval);
+            return -1;
             break;
         }
         fprintf(stderr,"HUNK STATS: %d ",nextval);
@@ -456,9 +470,33 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr," %d ",(*curr).old_end);
         fprintf(stderr," %d ",(*curr).new_start);
         fprintf(stderr," %d \n",(*curr).new_end);
+        //HUNK LEANGTH
+        //fprintf(stderr,"VERY PREVIOUS CHAR: %c %d .",very_previous_char,very_previous_char);
+        
+        if(hunk.type == 1) {
+            hunklen = hunk.new_end - hunk.new_start + 1;
+        }
+        else if(hunk.type == 2) {
+            hunklen = hunk.old_end - hunk.old_start + 1;
+        }
+        else if(hunk.type == 3) {
+            hunklen = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 1;
+        }
+        lines_count = 0;
         while((getval = hunk_getc(curr,diff)) >= 0) {
-            //fprintf(stderr,"Attempt");
-            fprintf(stderr,"%c",getval);
+            if(getval == '\n') {
+                lines_count++;
+            }
+            fprintf(stderr,"%c",very_previous_char);
+            //very_previous_char = getval;
+        }
+        fprintf(stderr,"VERY PREV CHAR: %c %d\n",very_previous_char, very_previous_char);
+        if(very_previous_char != '\n') {
+            linebreaks++;
+        }
+        fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
+        if(hunklen !=0 && hunklen != lines_count+linebreaks) {
+            return -1;
         }
         fprintf(stderr,"next hunk\n");
     }
