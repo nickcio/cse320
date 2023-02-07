@@ -134,11 +134,12 @@ int hunk_next(HUNK *hp, FILE *in) {
                         }
                     }
                     else if(curr == '>' || curr == '<') {
+                        //fprintf(stderr,"grump");
                         if(fgetc(temp) == ' ') {
                             line_start = 0;
                         }
                         else{
-                            //fprintf(stderr,"E 2");
+                            //fprintf(stderr,"BROKE");
                             return ERR;
                         }
                     }
@@ -202,10 +203,15 @@ int hunk_next(HUNK *hp, FILE *in) {
 
 static int linecount = 0;
 static int linetotal = 0;
+static char* addbuff = hunk_additions_buffer+2;
+static char* addbuffcount = hunk_additions_buffer;
+static char* delbuff = hunk_deletions_buffer+2;
+static char* delbuffcount = hunk_deletions_buffer;
 
 int hunk_getc(HUNK *hp, FILE *in) {
     HUNK hunk = *hp;
     int type = hunk.type;
+    int halfway = hunk.old_end - hunk.old_start + 1;
     if(hunk.type == 1) {
             linetotal = hunk.new_end - hunk.new_start + 1;
         }
@@ -274,7 +280,6 @@ int hunk_getc(HUNK *hp, FILE *in) {
 
     //CHANGE
     else if(type == 3) {
-        int halfway = hunk.old_end - hunk.old_start + 1;
         if(line_start == 1) {
             if(linecount < halfway) {
                 //fprintf(stderr,"LINE %d %d", linecount, linetotal);
@@ -302,7 +307,16 @@ int hunk_getc(HUNK *hp, FILE *in) {
                                 linecount+=1;
                                 return hunk_getc(hp, in);
                             }
+                            else{
+                                return ERR;
+                            }
                         }
+                        else{
+                            return ERR;
+                        }
+                    }
+                    else{
+                        return ERR;
                     }
                 }
             }
@@ -432,7 +446,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     int getval;
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
-            fprintf(stderr,"Error %d", fgetc(in));
+            fprintf(stderr,"Error %d !!!", nextval);
             break;
         }
         fprintf(stderr,"HUNK STATS: %d ",nextval);
@@ -442,16 +456,6 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr," %d ",(*curr).old_end);
         fprintf(stderr," %d ",(*curr).new_start);
         fprintf(stderr," %d \n",(*curr).new_end);
-        // linecount = 0;
-        // if(hunk.type == 1) {
-        //     linetotal = hunk.new_end - hunk.new_start + 1;
-        // }
-        // else if(hunk.type == 2) {
-        //     linetotal = hunk.old_end - hunk.old_start + 1;
-        // }
-        // else if(hunk.type == 3) {
-        //     linetotal = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 2;
-        // }
         while((getval = hunk_getc(curr,diff)) >= 0) {
             //fprintf(stderr,"Attempt");
             fprintf(stderr,"%c",getval);
