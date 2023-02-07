@@ -206,8 +206,18 @@ static int linetotal = 0;
 int hunk_getc(HUNK *hp, FILE *in) {
     HUNK hunk = *hp;
     int type = hunk.type;
+    if(hunk.type == 1) {
+            linetotal = hunk.new_end - hunk.new_start + 1;
+        }
+        else if(hunk.type == 2) {
+            linetotal = hunk.old_end - hunk.old_start + 1;
+        }
+        else if(hunk.type == 3) {
+            linetotal = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 2;
+        }
     //fprintf(stderr,"Linecount/Linetotal %d/%d", linecount,linetotal);
     if(linecount == linetotal) {
+        linecount = 0;
         return EOS;
     }
     char thischar = fgetc(in);
@@ -432,16 +442,16 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr," %d ",(*curr).old_end);
         fprintf(stderr," %d ",(*curr).new_start);
         fprintf(stderr," %d \n",(*curr).new_end);
-        linecount = 0;
-        if(hunk.type == 1) {
-            linetotal = hunk.new_end - hunk.new_start + 1;
-        }
-        else if(hunk.type == 2) {
-            linetotal = hunk.old_end - hunk.old_start + 1;
-        }
-        else if(hunk.type == 3) {
-            linetotal = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 2;
-        }
+        // linecount = 0;
+        // if(hunk.type == 1) {
+        //     linetotal = hunk.new_end - hunk.new_start + 1;
+        // }
+        // else if(hunk.type == 2) {
+        //     linetotal = hunk.old_end - hunk.old_start + 1;
+        // }
+        // else if(hunk.type == 3) {
+        //     linetotal = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 2;
+        // }
         while((getval = hunk_getc(curr,diff)) >= 0) {
             //fprintf(stderr,"Attempt");
             fprintf(stderr,"%c",getval);
