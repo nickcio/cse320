@@ -213,6 +213,7 @@ int hunk_next(HUNK *hp, FILE *in) {
 
 static int linecount = 0;
 static int linetotal = 0;
+static int changehalf = 0;
 static char* addbuff = hunk_additions_buffer+2;
 static char* addbuffcount = hunk_additions_buffer;
 static char* delbuff = hunk_deletions_buffer+2;
@@ -234,6 +235,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
     //fprintf(stderr,"Linecount/Linetotal %d/%d", linecount,linetotal);
     if(linecount == linetotal) {
         linecount = 0;
+        changehalf = 0;
         return EOS;
     }
     char thischar = fgetc(in);
@@ -308,6 +310,11 @@ int hunk_getc(HUNK *hp, FILE *in) {
                 }
             }
             else if(linecount == halfway) {
+                if(changehalf == 0) {
+                    changehalf = 1;
+                    ungetc(thischar,in);
+                    return EOS;
+                }
                 //fprintf(stderr,"HALWAY %d", halfway);
                 if(thischar == '-') {
                     if(fgetc(in) == '-') {
@@ -328,6 +335,9 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     else{
                         return ERR;
                     }
+                }
+                else{
+                    return ERR;
                 }
             }
             else if(linecount > halfway) {
@@ -456,6 +466,8 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     int getval;
     int hunklen = 0;
     int lines_count;
+    int lefthighest = -1;
+    int righthighest = -1;
     linebreaks = 0;
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
@@ -472,7 +484,11 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr," %d \n",(*curr).new_end);
         //HUNK LEANGTH
         //fprintf(stderr,"VERY PREVIOUS CHAR: %c %d .",very_previous_char,very_previous_char);
-        
+        if(hunk.old_end <= lefthighest || hunk.new_end <= righthighest) {
+            return -1;
+        }
+        lefthighest = hunk.old_end;
+        righthighest = hunk.new_end;
         if(hunk.type == 1) {
             hunklen = hunk.new_end - hunk.new_start + 1;
         }
@@ -489,6 +505,17 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
             fprintf(stderr,"%c",very_previous_char);
             //very_previous_char = getval;
+        }
+        //SECOND HALF OF CHANGE HUNK!
+        if(hunk.type == 3) {
+            fprintf(stderr,"SECOND HALF\n");
+            while((getval = hunk_getc(curr,diff)) >= 0) {
+            if(getval == '\n') {
+                lines_count++;
+            }
+            fprintf(stderr,"%c",very_previous_char);
+            //very_previous_char = getval;
+        }
         }
         fprintf(stderr,"VERY PREV CHAR: %c %d\n",very_previous_char, very_previous_char);
         if(very_previous_char != '\n') {
