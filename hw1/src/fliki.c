@@ -24,6 +24,10 @@ static int serial = 0;
 static int linebreaks = 0;
 static int prevwasn = 0;
 static int very_previous_char = 0;
+static char* addbuff = hunk_additions_buffer+2;
+static char* addbuffcount = hunk_additions_buffer;
+static char* delbuff = hunk_deletions_buffer+2;
+static char* delbuffcount = hunk_deletions_buffer;
 
 int hunk_next(HUNK *hp, FILE *in) {
     FILE *temp = in;
@@ -54,6 +58,10 @@ int hunk_next(HUNK *hp, FILE *in) {
         clearcount++;
     }
 
+    addbuff = hunk_additions_buffer+2;
+    addbuffcount = hunk_additions_buffer;
+    delbuff = hunk_deletions_buffer+2;
+    delbuffcount = hunk_deletions_buffer;
 
     while(curr != EOF){
         //fprintf(stderr,"MILESTONE");
@@ -232,10 +240,6 @@ int hunk_next(HUNK *hp, FILE *in) {
 static int linecount = 0;
 static int linetotal = 0;
 static int changehalf = 0;
-static char* addbuff = hunk_additions_buffer+2;
-static char* addbuffcount = hunk_additions_buffer;
-static char* delbuff = hunk_deletions_buffer+2;
-static char* delbuffcount = hunk_deletions_buffer;
 
 int hunk_getc(HUNK *hp, FILE *in) {
     HUNK hunk = *hp;
@@ -276,20 +280,26 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
         else{
-            *addbuff = thischar;
-            if(*addbuffcount < 255){
-                (*addbuffcount)++;
+            if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                *addbuff = thischar;
+                //fprintf(stderr,"BUFFR COUNT: %u / %u", (*addbuffcount),256);
+                if(((unsigned char) *addbuffcount) < 255){
+                    (*addbuffcount)++;
+                }
+                else{
+                    //fprintf(stderr,"OVEFLOW!!");
+                    (*(addbuffcount+1))++;
+                    (*addbuffcount) = 0;
+                }
+                addbuff++;
             }
-            else{
-                (*(addbuffcount+1))++;
-                (*addbuffcount) = 0;
-            }
-            addbuff++;
             if(thischar == '\n') {
                 line_start = 1;
                 linecount +=1;
-                addbuffcount = addbuff;
-                addbuff+=2;
+                if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                    addbuffcount = addbuff;
+                    addbuff+=2;
+                }
             }
         }
     }
@@ -312,20 +322,24 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
         else{
-            *delbuff = thischar;
-            if(*delbuffcount < 255){
-                (*delbuffcount)++;
+            if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                *delbuff = thischar;
+                if((unsigned char) *delbuffcount < 255){
+                    (*delbuffcount)++;
+                }
+                else{
+                    (*(delbuffcount+1))++;
+                    (*delbuffcount) = 0;
+                }
+                delbuff++;
             }
-            else{
-                (*(delbuffcount+1))++;
-                (*delbuffcount) = 0;
-            }
-            delbuff++;
             if(thischar == '\n') {
                 line_start = 1;
                 linecount +=1;
-                delbuffcount = delbuff;
-                delbuff+=2;
+                if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                    delbuffcount = delbuff;
+                    delbuff+=2;
+                }
             }
         }
     }
@@ -399,37 +413,45 @@ int hunk_getc(HUNK *hp, FILE *in) {
         }
         else{
             if(linecount < halfway) {
-                *delbuff = thischar;
-                if(*delbuffcount < 255){
-                    (*delbuffcount)++;
+                if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                    *delbuff = thischar;
+                    if((unsigned char) *delbuffcount < 255){
+                        (*delbuffcount)++;
+                    }
+                    else{
+                        (*(delbuffcount+1))++;
+                        (*delbuffcount) = 0;
+                    }
+                    delbuff++;
                 }
-                else{
-                    (*(delbuffcount+1))++;
-                    (*delbuffcount) = 0;
-                }
-                delbuff++;
                 if(thischar == '\n') {
                     line_start = 1;
                     linecount +=1;
-                    delbuffcount = delbuff;
-                    delbuff+=2;
+                    if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                        delbuffcount = delbuff;
+                        delbuff+=2;
+                    }
                 }
             }
             else if(linecount > halfway) {
-                *addbuff = thischar;
-                if(*addbuffcount < 255){
-                    (*addbuffcount)++;
+                if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                    *addbuff = thischar;
+                    if((unsigned char) *addbuffcount < 255){
+                        (*addbuffcount)++;
+                    }
+                    else{
+                        (*(addbuffcount+1))++;
+                        (*addbuffcount) = 0;
+                    }
+                    addbuff++;
                 }
-                else{
-                    (*(addbuffcount+1))++;
-                    (*addbuffcount) = 0;
-                }
-                addbuff++;
                 if(thischar == '\n') {
                     line_start = 1;
                     linecount +=1;
-                    addbuffcount = addbuff;
-                    addbuff+=2;
+                    if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                        addbuffcount = addbuff;
+                        addbuff+=2;
+                    }
                 }
             }
             else if(thischar == '\n') {
@@ -549,6 +571,9 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             return -1;
             break;
         }
+
+        
+
         fprintf(stderr,"HUNK STATS: %d ",nextval);
         fprintf(stderr," %d ",(*curr).type);
         fprintf(stderr," %d ",(*curr).serial);
@@ -605,7 +630,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         int count = 0;
         char* pointy = hunk_additions_buffer;
         while(count < HUNK_MAX) {
-            fprintf(stderr,"%u ", *pointy);
+            fprintf(stderr,"%u ", (unsigned char) *pointy);
             pointy++;
             count++;
         }
@@ -615,7 +640,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         count = 0;
         pointy = hunk_deletions_buffer;
         while(count < HUNK_MAX) {
-            fprintf(stderr,"%u ", *pointy);
+            fprintf(stderr,"%u ", (unsigned char) *pointy);
             pointy++;
             count++;
         }
