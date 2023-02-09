@@ -37,6 +37,24 @@ int hunk_next(HUNK *hp, FILE *in) {
     int firstin2 = -1;
     int lastin2 = -1;
     //fprintf(stderr,"LASTCHAR INITIALIZED \n");
+
+    int clearcount = 0;
+    char* clearpoint = hunk_additions_buffer;
+    while(clearcount < HUNK_MAX) {
+        *clearpoint = 0x0;
+        clearpoint++;
+        clearcount++;
+    }
+
+    clearcount = 0;
+    clearpoint = hunk_deletions_buffer;
+    while(clearcount < HUNK_MAX) {
+        *clearpoint = 0x0;
+        clearpoint++;
+        clearcount++;
+    }
+
+
     while(curr != EOF){
         //fprintf(stderr,"MILESTONE");
         //fprintf(stderr,"%c",curr);
@@ -258,9 +276,20 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
         else{
+            *addbuff = thischar;
+            if(*addbuffcount < 255){
+                (*addbuffcount)++;
+            }
+            else{
+                (*(addbuffcount+1))++;
+                (*addbuffcount) = 0;
+            }
+            addbuff++;
             if(thischar == '\n') {
                 line_start = 1;
                 linecount +=1;
+                addbuffcount = addbuff;
+                addbuff+=2;
             }
         }
     }
@@ -283,9 +312,20 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
         else{
+            *delbuff = thischar;
+            if(*delbuffcount < 255){
+                (*delbuffcount)++;
+            }
+            else{
+                (*(delbuffcount+1))++;
+                (*delbuffcount) = 0;
+            }
+            delbuff++;
             if(thischar == '\n') {
                 line_start = 1;
                 linecount +=1;
+                delbuffcount = delbuff;
+                delbuff+=2;
             }
         }
     }
@@ -358,7 +398,41 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
         }
         else{
-            if(thischar == '\n') {
+            if(linecount < halfway) {
+                *delbuff = thischar;
+                if(*delbuffcount < 255){
+                    (*delbuffcount)++;
+                }
+                else{
+                    (*(delbuffcount+1))++;
+                    (*delbuffcount) = 0;
+                }
+                delbuff++;
+                if(thischar == '\n') {
+                    line_start = 1;
+                    linecount +=1;
+                    delbuffcount = delbuff;
+                    delbuff+=2;
+                }
+            }
+            else if(linecount > halfway) {
+                *addbuff = thischar;
+                if(*addbuffcount < 255){
+                    (*addbuffcount)++;
+                }
+                else{
+                    (*(addbuffcount+1))++;
+                    (*addbuffcount) = 0;
+                }
+                addbuff++;
+                if(thischar == '\n') {
+                    line_start = 1;
+                    linecount +=1;
+                    addbuffcount = addbuff;
+                    addbuff+=2;
+                }
+            }
+            else if(thischar == '\n') {
                 line_start = 1;
                 linecount +=1;
             }
@@ -523,9 +597,31 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         }
         fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
         if(hunklen !=0 && hunklen != lines_count+linebreaks) {
+            fprintf(stderr,"LINE COUNT NOT GOOD\n");
             return -1;
         }
-        fprintf(stderr,"next hunk\n");
+
+        fprintf(stderr,"ADD BUFFER: ");
+        int count = 0;
+        char* pointy = hunk_additions_buffer;
+        while(count < HUNK_MAX) {
+            fprintf(stderr,"%u ", *pointy);
+            pointy++;
+            count++;
+        }
+        //pointy = pointy - count;
+
+        fprintf(stderr,"DEL BUFFER: ");
+        count = 0;
+        pointy = hunk_deletions_buffer;
+        while(count < HUNK_MAX) {
+            fprintf(stderr,"%u ", *pointy);
+            pointy++;
+            count++;
+        }
+        //pointy = pointy - count;
+
+        fprintf(stderr,"\nnext hunk\n");
     }
     fprintf(stderr,"DONE");
     return 0;
