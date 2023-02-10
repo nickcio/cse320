@@ -686,11 +686,12 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         //PATCHING
         char* addpatch = hunk_additions_buffer;
         if(curr->type == 1) {
-            while(in_i <= curr->old_start) {
+            while(in_i < curr->old_start) {
                 char thisval;
                 while((thisval = fgetc(in))) {
-                    fprintf(out,"%c",thisval);
-                    if(thisval == '\n') {
+                    if(thisval != EOF)
+                        fprintf(out,"%c",thisval);
+                    if(thisval == '\n' || thisval == EOF) {
                         in_i++;
                         break;
                     }
@@ -707,21 +708,22 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
         }
         else if(curr->type == 2) {
-            while(in_i < curr->old_start) {
+            while(in_i < curr->old_start-1) {
                 char thisval;
                 while((thisval = fgetc(in))) {
-                    fprintf(out,"%c",thisval);
-                    if(thisval == '\n') {
+                    if(thisval != EOF)
+                        fprintf(out,"%c",thisval);
+                    if(thisval == '\n' || thisval == EOF) {
                         in_i++;
                         break;
                     }
                 }
             }
-            while(in_i <= curr->old_end) {
+            while(in_i < curr->old_end) {
                 char thisval;
                 while((thisval = fgetc(in))) {
                     //fprintf(out,"%c",thisval);
-                    if(thisval == '\n') {
+                    if(thisval == '\n' || thisval == EOF) {
                         in_i++;
                         break;
                     }
@@ -729,21 +731,22 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
         }
         if(curr->type == 3) {
-            while(in_i < curr->old_start) {
+            while(in_i < curr->old_start-1) {
                 char thisval;
                 while((thisval = fgetc(in))) {
-                    fprintf(out,"%c",thisval);
-                    if(thisval == '\n') {
+                    if(thisval != EOF)
+                        fprintf(out,"%c",thisval);
+                    if(thisval == '\n' || thisval == EOF) {
                         in_i++;
                         break;
                     }
                 }
             }
-            while(in_i <= curr->old_end) {
+            while(in_i <= curr->old_end-1) {
                 char thisval;
                 while((thisval = fgetc(in))) {
                     //fprintf(out,"%c",thisval);
-                    if(thisval == '\n') {
+                    if(thisval == '\n' || thisval == EOF) {
                         in_i++;
                         break;
                     }
