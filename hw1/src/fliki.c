@@ -19,6 +19,8 @@
  * from the input stream, or ERR if the data in the input stream
  * could not be properly interpreted as a hunk.
  */
+
+static int permanent_error = 0;
 static int line_start = 1;
 static int serial = 0;
 static int linebreaks = 0;
@@ -123,7 +125,7 @@ int hunk_next(HUNK *hp, FILE *in) {
                         (*hp).new_start = firstin2;
                         (*hp).new_end = lastin2 >= 0 ? lastin2 : firstin2;
                         (*hp).type = type == 1 ? HUNK_APPEND_TYPE : type == 2 ? HUNK_DELETE_TYPE : type == 3 ? HUNK_CHANGE_TYPE: HUNK_NO_TYPE;
-                        return 0;
+                        return permanent_error ? ERR : 0;
                     }
                 }
                 line_start = 1;
@@ -462,7 +464,8 @@ int hunk_getc(HUNK *hp, FILE *in) {
     }
     very_previous_char = thischar;
     //fprintf(stderr,"AT END %c",thischar);
-    return thischar;
+    return permanent_error ? ERR : thischar;
+    //return thischar;
 }
 
 /**
@@ -516,7 +519,6 @@ void hunk_show(HUNK *hp, FILE *out) {
     }
     fprintf(stderr,"%u\n",hp->new_end);
 
-    //int counters = 1;
     while((*delprint) != 0 || (*(delprint+1)) != 0) {
         int fullcount = ((unsigned char) (*delprint) ) + ((unsigned char) (*(delprint+1)) )*256;
         delprint+=2;
@@ -616,9 +618,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     linebreaks = 0;
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
+            permanent_error = 1;
             fprintf(stderr,"Error %d !!!", nextval);
+            hunk_show(curr,stderr);
             return -1;
-            break;
         }
 
         
@@ -672,32 +675,20 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
         if(hunklen !=0 && hunklen != lines_count+linebreaks) {
             fprintf(stderr,"LINE COUNT NOT GOOD\n");
+            hunk_show(curr,stderr);
             return -1;
         }
-
-        /* fprintf(stderr,"ADD BUFFER: ");
-        int count = 0;
-        char* pointy = hunk_additions_buffer;
-        while(count < HUNK_MAX) {
-            fprintf(stderr,"%u ", (unsigned char) *pointy);
-            pointy++;
-            count++;
-        }
-        //pointy = pointy - count;
-
-        fprintf(stderr,"DEL BUFFER: ");
-        count = 0;
-        pointy = hunk_deletions_buffer;
-        while(count < HUNK_MAX) {
-            fprintf(stderr,"%u ", (unsigned char) *pointy);
-            pointy++;
-            count++;
-        }
-        //pointy = pointy - count; */
-        hunk_show(curr,stderr);
+        //hunk_show(curr,stderr);
 
         fprintf(stderr,"\nnext hunk\n");
     }
-    fprintf(stderr,"DONE");
+
+    if(linebreaks > 0 && very_previous_char == '\n') {
+        fprintf(stderr,"Incorrect Line Count!");
+        hunk_show(curr,stderr);
+        return -1;
+    }
+
+    fprintf(stderr,"Line breaks: %u, %u DONE", linebreaks, very_previous_char);
     return 0;
 }
