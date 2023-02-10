@@ -376,7 +376,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     if(fgetc(in) == '-') {
                         if(fgetc(in) == '-') {
                             if(fgetc(in) == '\n') {
-                                fprintf(stderr,"-----\n");
+                                //fprintf(stderr,"-----\n");
                                 linecount+=1;
                                 return hunk_getc(hp, in);
                             }
@@ -625,13 +625,13 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             return -1;
         }
 
-        fprintf(stderr,"HUNK STATS: %d ",nextval);
-        fprintf(stderr," %d ",(*curr).type);
-        fprintf(stderr," %d ",(*curr).serial);
-        fprintf(stderr," %d ",(*curr).old_start);
-        fprintf(stderr," %d ",(*curr).old_end);
-        fprintf(stderr," %d ",(*curr).new_start);
-        fprintf(stderr," %d \n",(*curr).new_end);
+        //fprintf(stderr,"HUNK STATS: %d ",nextval);
+        //fprintf(stderr," %d ",(*curr).type);
+        //fprintf(stderr," %d ",(*curr).serial);
+        //fprintf(stderr," %d ",(*curr).old_start);
+        //fprintf(stderr," %d ",(*curr).old_end);
+        //fprintf(stderr," %d ",(*curr).new_start);
+        //fprintf(stderr," %d \n",(*curr).new_end);
 
         if(hunk.old_end <= lefthighest || hunk.new_end <= righthighest) {
             return -1;
@@ -660,7 +660,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         }
         //SECOND HALF OF CHANGE HUNK!
         if(hunk.type == 3) {
-            fprintf(stderr,"SECOND HALF\n");
+            //fprintf(stderr,"SECOND HALF\n");
             while((getval = hunk_getc(curr,diff)) >= 0) {
             if(getval == '\n') {
                 lines_count++;
@@ -675,7 +675,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         if(very_previous_char != '\n') {
             linebreaks++;
         }
-        fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
+        //fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
         if(hunklen !=0 && hunklen != lines_count+linebreaks) {
             fprintf(stderr,"Incorrect Line Count!\n");
             hunk_show(curr,stderr);
@@ -763,7 +763,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
         }
 
-        fprintf(stderr,"\nnext hunk\n");
+        //fprintf(stderr,"\nnext hunk\n");
     }
 
     if(linebreaks > 0 && very_previous_char == '\n') {
@@ -771,7 +771,15 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         hunk_show(curr,stderr);
         return -1;
     }
+        char thisval;
+        while((thisval = fgetc(in))) {
+            if(thisval != EOF)
+                fprintf(out,"%c",thisval);
+            else {
+                break;
+            }
+        }
 
-    fprintf(stderr,"Line breaks: %u, %u DONE", linebreaks, very_previous_char);
+    //fprintf(stderr,"Line breaks: %u, %u DONE", linebreaks, very_previous_char);
     return 0;
 }
