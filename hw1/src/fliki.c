@@ -502,9 +502,9 @@ void hunk_show(HUNK *hp, FILE *out) {
     char* delprint = hunk_deletions_buffer;
     char* addprint = hunk_additions_buffer;
     if(hp->old_start != hp->old_end) {
-        fprintf(stderr,"%u,",hp->old_start);
+        fprintf(stderr,"%d,",hp->old_start);
     }
-    fprintf(stderr,"%u",hp->old_end);
+    fprintf(stderr,"%d",hp->old_end);
     if(type == 1) {
         fprintf(stderr,"a");
     }
@@ -515,10 +515,9 @@ void hunk_show(HUNK *hp, FILE *out) {
         fprintf(stderr,"c");
     }
     if(hp->new_start != hp->new_end) {
-        fprintf(stderr,"%u,",hp->new_start);
+        fprintf(stderr,"%d,",hp->new_start);
     }
-    fprintf(stderr,"%u\n",hp->new_end);
-
+    fprintf(stderr,"%d\n", hp->new_end);
     while((*delprint) != 0 || (*(delprint+1)) != 0) {
         int fullcount = ((unsigned char) (*delprint) ) + ((unsigned char) (*(delprint+1)) )*256;
         delprint+=2;
@@ -608,6 +607,12 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     //}
     //printf("after");
     HUNK hunk;
+    hunk.old_end= -1;
+    hunk.new_end= -1;
+    hunk.old_start= -1;
+    hunk.new_start= -1;
+    hunk.type = 0;
+    hunk.serial = -1;
     HUNK* curr = &hunk;
     int nextval;
     int getval;
@@ -620,8 +625,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
             permanent_error = 1;
-            fprintf(stderr,"Syntax Error!\n");
-            hunk_show(curr,stderr);
+            if((global_options & QUIET_OPTION )!= QUIET_OPTION) {
+                fprintf(stderr,"Syntax Error!\n");
+                hunk_show(curr,stderr);
+            }
             return -1;
         }
 
@@ -654,8 +661,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
         }
         if(getval == ERR) {
-            fprintf(stderr,"Syntax Error!\n");
-            hunk_show(curr,stderr);
+            if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+                fprintf(stderr,"Syntax Error!\n");
+                hunk_show(curr,stderr);
+            }
             return -1;
         }
         //SECOND HALF OF CHANGE HUNK!
@@ -667,8 +676,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             }
         }
         if(getval == ERR) {
-            fprintf(stderr,"Syntax Error!\n");
-            hunk_show(curr,stderr);
+            if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+                fprintf(stderr,"Syntax Error!\n");
+                hunk_show(curr,stderr);
+            }
             return -1;
         }
         }
@@ -677,8 +688,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         }
         //fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
         if(hunklen !=0 && hunklen != lines_count+linebreaks) {
-            fprintf(stderr,"Incorrect Line Count!\n");
-            hunk_show(curr,stderr);
+            if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+                fprintf(stderr,"Incorrect Line Count!\n");
+                hunk_show(curr,stderr);
+            }
             return -1;
         }
         //hunk_show(curr,stderr);
@@ -767,8 +780,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     }
 
     if(linebreaks > 0 && very_previous_char == '\n') {
-        fprintf(stderr,"Incorrect Line Count!\n");
-        hunk_show(curr,stderr);
+        if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+            fprintf(stderr,"Incorrect Line Count!\n");
+            hunk_show(curr,stderr);
+        }
         return -1;
     }
         char thisval;

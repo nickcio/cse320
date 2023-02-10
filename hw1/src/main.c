@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     FILE* output = stdout;
     if((global_options & NO_PATCH_OPTION) == NO_PATCH_OPTION) {
         fclose(stdout);
-        output = stderr;
+        //output = stderr;
     }
     FILE* diff_file = fopen(diff_filename,"r");
     int status;
@@ -34,7 +34,9 @@ int main(int argc, char **argv)
         status = patch(stdin,output,diff_file);
     }
     else {
-        fprintf(stderr,"File Not Found.\n");
+        if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+            fprintf(stderr,"File Not Found.\n");
+        }
         return EXIT_FAILURE;
     }
 
