@@ -527,6 +527,9 @@ void hunk_show(HUNK *hp, FILE *out) {
             fullcount--;
         }
     }
+    if(delprint == hunk_deletions_buffer+HUNK_MAX-2) {
+        fprintf(stderr,"...\n");
+    }
     if(type == 3) {
         fprintf(stderr,"---\n");
     }
@@ -539,6 +542,9 @@ void hunk_show(HUNK *hp, FILE *out) {
             addprint++;
             fullcount--;
         }
+    }
+    if(addprint == hunk_additions_buffer+HUNK_MAX-2) {
+        fprintf(stderr,"...\n");
     }
 }
 
