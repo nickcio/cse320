@@ -495,8 +495,51 @@ int hunk_getc(HUNK *hp, FILE *in) {
  */
 
 void hunk_show(HUNK *hp, FILE *out) {
-    // TO BE IMPLEMENTED
-    abort();
+    int type = hp->type;
+    char* delprint = hunk_deletions_buffer;
+    char* addprint = hunk_additions_buffer;
+    if(hp->old_start != hp->old_end) {
+        fprintf(stderr,"%u,",hp->old_start);
+    }
+    fprintf(stderr,"%u",hp->old_end);
+    if(type == 1) {
+        fprintf(stderr,"a");
+    }
+    else if(type == 2) {
+        fprintf(stderr,"d");
+    }
+    else if(type == 3) {
+        fprintf(stderr,"c");
+    }
+    if(hp->new_start != hp->new_end) {
+        fprintf(stderr,"%u,",hp->new_start);
+    }
+    fprintf(stderr,"%u\n",hp->new_end);
+
+    //int counters = 1;
+    while((*delprint) != 0 || (*(delprint+1)) != 0) {
+        int fullcount = ((unsigned char) (*delprint) ) + ((unsigned char) (*(delprint+1)) )*256;
+        delprint+=2;
+        fprintf(stderr,"< ");
+        while(fullcount > 0){
+            fprintf(stderr,"%c",(*delprint));
+            delprint++;
+            fullcount--;
+        }
+    }
+    if(type == 3) {
+        fprintf(stderr,"---\n");
+    }
+    while((*addprint) != 0 || (*(addprint+1)) != 0) {
+        int fullcount = ((unsigned char) (*addprint) ) + ((unsigned char) (*(addprint+1)) )*256;
+        addprint+=2;
+        fprintf(stderr,"> ");
+        while(fullcount > 0){
+            fprintf(stderr,"%c",(*addprint));
+            addprint++;
+            fullcount--;
+        }
+    }
 }
 
 /**
@@ -602,7 +645,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             if(getval == '\n') {
                 lines_count++;
             }
-            fprintf(stderr,"%c",very_previous_char);
+            //fprintf(stderr,"%c",very_previous_char);
             //very_previous_char = getval;
         }
         //SECOND HALF OF CHANGE HUNK!
@@ -626,7 +669,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             return -1;
         }
 
-        fprintf(stderr,"ADD BUFFER: ");
+        /* fprintf(stderr,"ADD BUFFER: ");
         int count = 0;
         char* pointy = hunk_additions_buffer;
         while(count < HUNK_MAX) {
@@ -644,7 +687,8 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             pointy++;
             count++;
         }
-        //pointy = pointy - count;
+        //pointy = pointy - count; */
+        hunk_show(curr,stderr);
 
         fprintf(stderr,"\nnext hunk\n");
     }
