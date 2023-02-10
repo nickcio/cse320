@@ -29,7 +29,12 @@ int main(int argc, char **argv)
         output = stderr;
     }
     FILE* diff_file = fopen(diff_filename,"r");
-    patch(stdin,output,diff_file);
+    if(diff_file) {
+        patch(stdin,output,diff_file);
+    }
+    else {
+        fprintf(stderr,"File Not Found.\n");
+    }
 
     return EXIT_FAILURE; 
 }

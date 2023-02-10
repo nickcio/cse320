@@ -616,15 +616,14 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     int lefthighest = -1;
     int righthighest = -1;
     linebreaks = 0;
+    int in_i = 0;
     while((nextval = hunk_next(curr,diff)) != EOF) {
         if(nextval == ERR) {
             permanent_error = 1;
-            fprintf(stderr,"Error %d !!!", nextval);
+            fprintf(stderr,"Syntax Error!\n");
             hunk_show(curr,stderr);
             return -1;
         }
-
-        
 
         fprintf(stderr,"HUNK STATS: %d ",nextval);
         fprintf(stderr," %d ",(*curr).type);
@@ -633,8 +632,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         fprintf(stderr," %d ",(*curr).old_end);
         fprintf(stderr," %d ",(*curr).new_start);
         fprintf(stderr," %d \n",(*curr).new_end);
-        //HUNK LEANGTH
-        //fprintf(stderr,"VERY PREVIOUS CHAR: %c %d .",very_previous_char,very_previous_char);
+
         if(hunk.old_end <= lefthighest || hunk.new_end <= righthighest) {
             return -1;
         }
@@ -654,8 +652,11 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             if(getval == '\n') {
                 lines_count++;
             }
-            //fprintf(stderr,"%c",very_previous_char);
-            //very_previous_char = getval;
+        }
+        if(getval == ERR) {
+            fprintf(stderr,"Syntax Error!\n");
+            hunk_show(curr,stderr);
+            return -1;
         }
         //SECOND HALF OF CHANGE HUNK!
         if(hunk.type == 3) {
@@ -664,27 +665,106 @@ int patch(FILE *in, FILE *out, FILE *diff) {
             if(getval == '\n') {
                 lines_count++;
             }
-            fprintf(stderr,"%c",very_previous_char);
-            //very_previous_char = getval;
+        }
+        if(getval == ERR) {
+            fprintf(stderr,"Syntax Error!\n");
+            hunk_show(curr,stderr);
+            return -1;
         }
         }
-        fprintf(stderr,"VERY PREV CHAR: %c %d\n",very_previous_char, very_previous_char);
         if(very_previous_char != '\n') {
             linebreaks++;
         }
         fprintf(stderr,"LINES: %d =? %d\n",hunklen,lines_count+linebreaks);
         if(hunklen !=0 && hunklen != lines_count+linebreaks) {
-            fprintf(stderr,"LINE COUNT NOT GOOD\n");
+            fprintf(stderr,"Incorrect Line Count!\n");
             hunk_show(curr,stderr);
             return -1;
         }
         //hunk_show(curr,stderr);
 
+        //PATCHING
+        char* addpatch = hunk_additions_buffer;
+        if(curr->type == 1) {
+            while(in_i <= curr->old_start) {
+                char thisval;
+                while((thisval = fgetc(in))) {
+                    fprintf(out,"%c",thisval);
+                    if(thisval == '\n') {
+                        in_i++;
+                        break;
+                    }
+                }
+            }
+            while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
+                int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
+                addpatch+=2;
+                while(fullcount > 0){
+                    fprintf(out,"%c",(*addpatch));
+                    addpatch++;
+                    fullcount--;
+                }
+            }
+        }
+        else if(curr->type == 2) {
+            while(in_i < curr->old_start) {
+                char thisval;
+                while((thisval = fgetc(in))) {
+                    fprintf(out,"%c",thisval);
+                    if(thisval == '\n') {
+                        in_i++;
+                        break;
+                    }
+                }
+            }
+            while(in_i <= curr->old_end) {
+                char thisval;
+                while((thisval = fgetc(in))) {
+                    //fprintf(out,"%c",thisval);
+                    if(thisval == '\n') {
+                        in_i++;
+                        break;
+                    }
+                }
+            }
+        }
+        if(curr->type == 3) {
+            while(in_i < curr->old_start) {
+                char thisval;
+                while((thisval = fgetc(in))) {
+                    fprintf(out,"%c",thisval);
+                    if(thisval == '\n') {
+                        in_i++;
+                        break;
+                    }
+                }
+            }
+            while(in_i <= curr->old_end) {
+                char thisval;
+                while((thisval = fgetc(in))) {
+                    //fprintf(out,"%c",thisval);
+                    if(thisval == '\n') {
+                        in_i++;
+                        break;
+                    }
+                }
+            }
+            while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
+                int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
+                addpatch+=2;
+                while(fullcount > 0){
+                    fprintf(out,"%c",(*addpatch));
+                    addpatch++;
+                    fullcount--;
+                }
+            }
+        }
+
         fprintf(stderr,"\nnext hunk\n");
     }
 
     if(linebreaks > 0 && very_previous_char == '\n') {
-        fprintf(stderr,"Incorrect Line Count!");
+        fprintf(stderr,"Incorrect Line Count!\n");
         hunk_show(curr,stderr);
         return -1;
     }
