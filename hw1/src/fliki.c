@@ -32,6 +32,9 @@ static char* delbuff = hunk_deletions_buffer+2;
 static char* delbuffcount = hunk_deletions_buffer;
 
 int hunk_next(HUNK *hp, FILE *in) {
+    if(permanent_error) {
+        return ERR;
+    }
     FILE *temp = in;
     char curr;
     int index = 0;
@@ -119,7 +122,7 @@ int hunk_next(HUNK *hp, FILE *in) {
                     }
                     else {
                         serial++;
-                        (*hp).serial = serial;
+                        (*hp).serial = hp->serial+1;
                         (*hp).old_start = firstin1;
                         (*hp).old_end = lastin1 >= 0 ? lastin1 : firstin1;
                         (*hp).new_start = firstin2;
@@ -244,6 +247,9 @@ static int linetotal = 0;
 static int changehalf = 0;
 
 int hunk_getc(HUNK *hp, FILE *in) {
+    if(permanent_error) {
+        return ERR;
+    }
     HUNK hunk = *hp;
     int type = hunk.type;
     int halfway = hunk.old_end - hunk.old_start + 1;
@@ -502,50 +508,50 @@ void hunk_show(HUNK *hp, FILE *out) {
     char* delprint = hunk_deletions_buffer;
     char* addprint = hunk_additions_buffer;
     if(hp->old_start != hp->old_end) {
-        fprintf(stderr,"%d,",hp->old_start);
+        fprintf(out,"%d,",hp->old_start);
     }
-    fprintf(stderr,"%d",hp->old_end);
+    fprintf(out,"%d",hp->old_end);
     if(type == 1) {
-        fprintf(stderr,"a");
+        fprintf(out,"a");
     }
     else if(type == 2) {
-        fprintf(stderr,"d");
+        fprintf(out,"d");
     }
     else if(type == 3) {
-        fprintf(stderr,"c");
+        fprintf(out,"c");
     }
     if(hp->new_start != hp->new_end) {
-        fprintf(stderr,"%d,",hp->new_start);
+        fprintf(out,"%d,",hp->new_start);
     }
-    fprintf(stderr,"%d\n", hp->new_end);
+    fprintf(out,"%d\n", hp->new_end);
     while((*delprint) != 0 || (*(delprint+1)) != 0) {
         int fullcount = ((unsigned char) (*delprint) ) + ((unsigned char) (*(delprint+1)) )*256;
         delprint+=2;
-        fprintf(stderr,"< ");
+        fprintf(out,"< ");
         while(fullcount > 0){
-            fprintf(stderr,"%c",(*delprint));
+            fprintf(out,"%c",(*delprint));
             delprint++;
             fullcount--;
         }
     }
     if(delprint == hunk_deletions_buffer+HUNK_MAX-2) {
-        fprintf(stderr,"...\n");
+        fprintf(out,"...\n");
     }
     if(type == 3) {
-        fprintf(stderr,"---\n");
+        fprintf(out,"---\n");
     }
     while((*addprint) != 0 || (*(addprint+1)) != 0) {
         int fullcount = ((unsigned char) (*addprint) ) + ((unsigned char) (*(addprint+1)) )*256;
         addprint+=2;
-        fprintf(stderr,"> ");
+        fprintf(out,"> ");
         while(fullcount > 0){
-            fprintf(stderr,"%c",(*addprint));
+            fprintf(out,"%c",(*addprint));
             addprint++;
             fullcount--;
         }
     }
     if(addprint == hunk_additions_buffer+HUNK_MAX-2) {
-        fprintf(stderr,"...\n");
+        fprintf(out,"...\n");
     }
 }
 
@@ -607,10 +613,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
     //}
     //printf("after");
     HUNK hunk;
-    hunk.old_end= -1;
-    hunk.new_end= -1;
-    hunk.old_start= -1;
-    hunk.new_start= -1;
+    hunk.old_end= 0;
+    hunk.new_end= 0;
+    hunk.old_start= 0;
+    hunk.new_start= 0;
     hunk.type = 0;
     hunk.serial = -1;
     HUNK* curr = &hunk;
@@ -775,6 +781,9 @@ int patch(FILE *in, FILE *out, FILE *diff) {
                 }
             }
         }
+        if(addpatch == hunk_additions_buffer+HUNK_MAX-2) {
+        fprintf(out,"...\n");
+    }
 
         //fprintf(stderr,"\nnext hunk\n");
     }
