@@ -787,8 +787,14 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 
         //fprintf(stderr,"\nnext hunk\n");
     }
-
-    if(linebreaks > 0 && very_previous_char == '\n') {
+    if(very_previous_char != '\n') {
+        if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+            fprintf(stderr,"Syntax Error!\n");
+            hunk_show(curr,stderr);
+        }
+        return -1;
+    }
+    if(linebreaks > 0) {
         if((global_options & QUIET_OPTION) != QUIET_OPTION) {
             fprintf(stderr,"Incorrect Line Count!\n");
             hunk_show(curr,stderr);
