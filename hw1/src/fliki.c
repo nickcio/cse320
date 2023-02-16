@@ -253,24 +253,60 @@ int hunk_getc(HUNK *hp, FILE *in) {
     HUNK hunk = *hp;
     int type = hunk.type;
     int halfway = hunk.old_end - hunk.old_start + 1;
-    if(hunk.type == 1) {
-            linetotal = hunk.new_end - hunk.new_start + 1;
-        }
-        else if(hunk.type == 2) {
-            linetotal = hunk.old_end - hunk.old_start + 1;
-        }
-        else if(hunk.type == 3) {
-            linetotal = hunk.old_end - hunk.old_start + 1 + hunk.new_end - hunk.new_start + 2;
-        }
     //fprintf(stderr,"Linecount/Linetotal %d/%d", linecount,linetotal);
-    if(linecount == linetotal) {
-        linecount = 0;
+
+    char thischar = fgetc(in);
+    int num = thischar-48;
+    //fprintf(stderr,"Attempt X %c", thischar);
+    //ADD
+    if(line_start && (num >= 0 && num <= 9)) {
+        //fprintf(stderr,"HERE1");
+        if(type == 3 && changehalf == 0) {
+            //fprintf(stderr,"HERE2");
+            return ERR;
+        }
+        ungetc(thischar,in);
         changehalf = 0;
         return EOS;
     }
-    char thischar = fgetc(in);
-    //fprintf(stderr,"Attempt X %c", thischar);
-    //ADD
+
+    if(line_start && thischar == '-') {
+        //fprintf(stderr,"HERE3");
+        if(type == 3 && changehalf == 1) {
+            //fprintf(stderr,"HERE4");
+            return ERR;
+        }
+        if(fgetc(in) == '-') {
+            //fprintf(stderr,"HERE5");
+            if(fgetc(in) == '-') {
+                //fprintf(stderr,"HERE6");
+                if(fgetc(in) == '\n') {
+                    //fprintf(stderr,"HERE7 CHANGEHALF=%d ",changehalf);
+                    changehalf = 1;
+                    return EOS;
+                }
+                else{
+                    return ERR;
+                }
+            }
+            else{
+                return ERR;
+            }
+        }
+        else{
+            return ERR;
+        }
+    }
+    
+    if(line_start && thischar == EOF) {
+        if(type == 3 && changehalf == 0) {
+            return ERR;
+        }
+        changehalf = 0;
+        ungetc(thischar,in);
+        return EOS;
+    }
+
     if(type == 1) {
         if(line_start == 1) {
             if(thischar == '>') {
@@ -303,7 +339,6 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
             if(thischar == '\n') {
                 line_start = 1;
-                linecount +=1;
                 if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
                     addbuffcount = addbuff;
                     addbuff+=2;
@@ -343,7 +378,6 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
             if(thischar == '\n') {
                 line_start = 1;
-                linecount +=1;
                 if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
                     delbuffcount = delbuff;
                     delbuff+=2;
@@ -355,7 +389,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
     //CHANGE
     else if(type == 3) {
         if(line_start == 1) {
-            if(linecount < halfway) {
+            if(!changehalf) {
                 //fprintf(stderr,"LINE %d %d", linecount, linetotal);
                 if(thischar == '<') {
                     if(fgetc(in) == ' ') {
@@ -367,42 +401,8 @@ int hunk_getc(HUNK *hp, FILE *in) {
                         return ERR;
                     }
                 }
-                else{
-                    return ERR;
-                }
             }
-            else if(linecount == halfway) {
-                if(changehalf == 0) {
-                    changehalf = 1;
-                    ungetc(thischar,in);
-                    return EOS;
-                }
-                //fprintf(stderr,"HALWAY %d", halfway);
-                if(thischar == '-') {
-                    if(fgetc(in) == '-') {
-                        if(fgetc(in) == '-') {
-                            if(fgetc(in) == '\n') {
-                                //fprintf(stderr,"-----\n");
-                                linecount+=1;
-                                return hunk_getc(hp, in);
-                            }
-                            else{
-                                return ERR;
-                            }
-                        }
-                        else{
-                            return ERR;
-                        }
-                    }
-                    else{
-                        return ERR;
-                    }
-                }
-                else{
-                    return ERR;
-                }
-            }
-            else if(linecount > halfway) {
+            else if(changehalf) {
                 //fprintf(stderr,"LINE %d %d", linecount, linetotal);
                 if(thischar == '>') {
                     if(fgetc(in) == ' ') {
@@ -411,16 +411,18 @@ int hunk_getc(HUNK *hp, FILE *in) {
                         return hunk_getc(hp,in);
                     }
                     else{
+                        //fprintf(stderr,"HEREX");
                         return ERR;
                     }
                 }
                 else{
+                    //fprintf(stderr,"HEREY %c %d ",thischar,num);
                     return ERR;
                 }
             }
         }
         else{
-            if(linecount < halfway) {
+            if(!changehalf) {
                 if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
                     *delbuff = thischar;
                     if((unsigned char) *delbuffcount < 255){
@@ -434,14 +436,13 @@ int hunk_getc(HUNK *hp, FILE *in) {
                 }
                 if(thischar == '\n') {
                     line_start = 1;
-                    linecount +=1;
                     if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
                         delbuffcount = delbuff;
                         delbuff+=2;
                     }
                 }
             }
-            else if(linecount > halfway) {
+            else if(changehalf) {
                 if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
                     *addbuff = thischar;
                     if((unsigned char) *addbuffcount < 255){
@@ -455,7 +456,6 @@ int hunk_getc(HUNK *hp, FILE *in) {
                 }
                 if(thischar == '\n') {
                     line_start = 1;
-                    linecount +=1;
                     if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
                         addbuffcount = addbuff;
                         addbuff+=2;
@@ -464,7 +464,6 @@ int hunk_getc(HUNK *hp, FILE *in) {
             }
             else if(thischar == '\n') {
                 line_start = 1;
-                linecount +=1;
             }
         }
     }
@@ -677,17 +676,19 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         if(hunk.type == 3) {
             //fprintf(stderr,"SECOND HALF\n");
             while((getval = hunk_getc(curr,diff)) >= 0) {
-            if(getval == '\n') {
-                lines_count++;
+                //fprintf(stderr,"%d/%c: ",getval,getval);
+                if(getval == '\n') {
+                    lines_count++;
+                }
             }
-        }
-        if(getval == ERR) {
-            if((global_options & QUIET_OPTION) != QUIET_OPTION) {
-                fprintf(stderr,"Syntax Error!\n");
-                hunk_show(curr,stderr);
+            //fprintf(stderr,"last: %c/%d",getval,getval);
+            if(getval == ERR) {
+                if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+                    fprintf(stderr,"Syntax Error!\n");
+                    hunk_show(curr,stderr);
+                }
+                return -1;
             }
-            return -1;
-        }
         }
         if(very_previous_char != '\n') {
             linebreaks++;
