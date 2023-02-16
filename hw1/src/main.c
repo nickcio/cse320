@@ -24,10 +24,6 @@ int main(int argc, char **argv)
     if(global_options == HELP_OPTION)
        USAGE(*argv, EXIT_SUCCESS);
     FILE* output = stdout;
-    if((global_options & NO_PATCH_OPTION) == NO_PATCH_OPTION) {
-        fclose(stdout);
-        //output = stderr;
-    }
     FILE* diff_file = fopen(diff_filename,"r");
     int status;
     if(diff_file) {
