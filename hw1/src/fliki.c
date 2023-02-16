@@ -703,87 +703,89 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         //hunk_show(curr,stderr);
 
         //PATCHING
-        char* addpatch = hunk_additions_buffer;
-        if(curr->type == 1) {
-            while(in_i < curr->old_start) {
-                char thisval;
-                while((thisval = fgetc(in))) {
-                    if(thisval != EOF)
-                        fprintf(out,"%c",thisval);
-                    if(thisval == '\n' || thisval == EOF) {
-                        in_i++;
-                        break;
+        if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+            char* addpatch = hunk_additions_buffer;
+            if(curr->type == 1) {
+                while(in_i < curr->old_start) {
+                    char thisval;
+                    while((thisval = fgetc(in))) {
+                        if(thisval != EOF)
+                            fprintf(out,"%c",thisval);
+                        if(thisval == '\n' || thisval == EOF) {
+                            in_i++;
+                            break;
+                        }
+                    }
+                }
+                while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
+                    int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
+                    addpatch+=2;
+                    while(fullcount > 0){
+                        fprintf(out,"%c",(*addpatch));
+                        addpatch++;
+                        fullcount--;
                     }
                 }
             }
-            while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
-                int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
-                addpatch+=2;
-                while(fullcount > 0){
-                    fprintf(out,"%c",(*addpatch));
-                    addpatch++;
-                    fullcount--;
+            else if(curr->type == 2) {
+                while(in_i < curr->old_start-1) {
+                    char thisval;
+                    while((thisval = fgetc(in))) {
+                        if(thisval != EOF)
+                            fprintf(out,"%c",thisval);
+                        if(thisval == '\n' || thisval == EOF) {
+                            in_i++;
+                            break;
+                        }
+                    }
                 }
+                while(in_i < curr->old_end) {
+                    char thisval;
+                    while((thisval = fgetc(in))) {
+                        //fprintf(out,"%c",thisval);
+                        if(thisval == '\n' || thisval == EOF) {
+                            in_i++;
+                            break;
+                        }
+                    }
+                }
+            }
+            if(curr->type == 3) {
+                while(in_i < curr->old_start-1) {
+                    char thisval;
+                    while((thisval = fgetc(in))) {
+                        if(thisval != EOF)
+                            fprintf(out,"%c",thisval);
+                        if(thisval == '\n' || thisval == EOF) {
+                            in_i++;
+                            break;
+                        }
+                    }
+                }
+                while(in_i <= curr->old_end-1) {
+                    char thisval;
+                    while((thisval = fgetc(in))) {
+                        //fprintf(out,"%c",thisval);
+                        if(thisval == '\n' || thisval == EOF) {
+                            in_i++;
+                            break;
+                        }
+                    }
+                }
+                while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
+                    int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
+                    addpatch+=2;
+                    while(fullcount > 0){
+                        fprintf(out,"%c",(*addpatch));
+                        addpatch++;
+                        fullcount--;
+                    }
+                }
+            }
+            if(addpatch == hunk_additions_buffer+HUNK_MAX-2) {
+            fprintf(out,"...\n");
             }
         }
-        else if(curr->type == 2) {
-            while(in_i < curr->old_start-1) {
-                char thisval;
-                while((thisval = fgetc(in))) {
-                    if(thisval != EOF)
-                        fprintf(out,"%c",thisval);
-                    if(thisval == '\n' || thisval == EOF) {
-                        in_i++;
-                        break;
-                    }
-                }
-            }
-            while(in_i < curr->old_end) {
-                char thisval;
-                while((thisval = fgetc(in))) {
-                    //fprintf(out,"%c",thisval);
-                    if(thisval == '\n' || thisval == EOF) {
-                        in_i++;
-                        break;
-                    }
-                }
-            }
-        }
-        if(curr->type == 3) {
-            while(in_i < curr->old_start-1) {
-                char thisval;
-                while((thisval = fgetc(in))) {
-                    if(thisval != EOF)
-                        fprintf(out,"%c",thisval);
-                    if(thisval == '\n' || thisval == EOF) {
-                        in_i++;
-                        break;
-                    }
-                }
-            }
-            while(in_i <= curr->old_end-1) {
-                char thisval;
-                while((thisval = fgetc(in))) {
-                    //fprintf(out,"%c",thisval);
-                    if(thisval == '\n' || thisval == EOF) {
-                        in_i++;
-                        break;
-                    }
-                }
-            }
-            while((*addpatch) != 0 || (*(addpatch+1)) != 0) {
-                int fullcount = ((unsigned char) (*addpatch) ) + ((unsigned char) (*(addpatch+1)) )*256;
-                addpatch+=2;
-                while(fullcount > 0){
-                    fprintf(out,"%c",(*addpatch));
-                    addpatch++;
-                    fullcount--;
-                }
-            }
-        }
-        if(addpatch == hunk_additions_buffer+HUNK_MAX-2) {
-        fprintf(out,"...\n");
-    }
 
         //fprintf(stderr,"\nnext hunk\n");
     }
@@ -802,7 +804,7 @@ int patch(FILE *in, FILE *out, FILE *diff) {
         return -1;
     }
         char thisval;
-        while((thisval = fgetc(in))) {
+        while((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION && (thisval = fgetc(in))) {
             if(thisval != EOF)
                 fprintf(out,"%c",thisval);
             else {
