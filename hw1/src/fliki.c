@@ -263,6 +263,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
         //fprintf(stderr,"HERE1");
         if(type == 3 && changehalf == 0) {
             //fprintf(stderr,"HERE2");
+            permanent_error=1;
             return ERR;
         }
         ungetc(thischar,in);
@@ -274,6 +275,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
         //fprintf(stderr,"HERE3");
         if(type == 3 && changehalf == 1) {
             //fprintf(stderr,"HERE4");
+            permanent_error=1;
             return ERR;
         }
         if(fgetc(in) == '-') {
@@ -286,20 +288,24 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     return EOS;
                 }
                 else{
+                    permanent_error=1;
                     return ERR;
                 }
             }
             else{
+                permanent_error=1;
                 return ERR;
             }
         }
         else{
+            permanent_error=1;
             return ERR;
         }
     }
     
     if(line_start && thischar == EOF) {
         if(type == 3 && changehalf == 0) {
+            permanent_error=1;
             return ERR;
         }
         changehalf = 0;
@@ -316,10 +322,12 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     return hunk_getc(hp,in);
                 }
                 else{
+                    permanent_error=1;
                     return ERR;
                 }
             }
             else{
+                permanent_error=1;
                 return ERR;
             }
         }
@@ -357,10 +365,12 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     return hunk_getc(hp,in);
                 }
                 else{
+                    permanent_error=1;
                     return ERR;
                 }
             }
             else{
+                permanent_error=1;
                 return ERR;
             }
         }
@@ -398,6 +408,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
                         return hunk_getc(hp,in);
                     }
                     else{
+                        permanent_error=1;
                         return ERR;
                     }
                 }
@@ -412,18 +423,20 @@ int hunk_getc(HUNK *hp, FILE *in) {
                     }
                     else{
                         //fprintf(stderr,"HEREX");
+                        permanent_error=1;
                         return ERR;
                     }
                 }
                 else{
                     //fprintf(stderr,"HEREY %c %d ",thischar,num);
+                    permanent_error=1;
                     return ERR;
                 }
             }
         }
         else{
             if(!changehalf) {
-                if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0 && delbuff < hunk_deletions_buffer+HUNK_MAX-2) {
                     *delbuff = thischar;
                     if((unsigned char) *delbuffcount < 255){
                         (*delbuffcount)++;
@@ -436,14 +449,14 @@ int hunk_getc(HUNK *hp, FILE *in) {
                 }
                 if(thischar == '\n') {
                     line_start = 1;
-                    if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0) {
+                    if(*(hunk_deletions_buffer+HUNK_MAX-3) == 0x0 && delbuff < hunk_deletions_buffer+HUNK_MAX-2) {
                         delbuffcount = delbuff;
                         delbuff+=2;
                     }
                 }
             }
             else if(changehalf) {
-                if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0 && addbuff < hunk_additions_buffer+HUNK_MAX-2) {
                     *addbuff = thischar;
                     if((unsigned char) *addbuffcount < 255){
                         (*addbuffcount)++;
@@ -456,7 +469,7 @@ int hunk_getc(HUNK *hp, FILE *in) {
                 }
                 if(thischar == '\n') {
                     line_start = 1;
-                    if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0) {
+                    if(*(hunk_additions_buffer+HUNK_MAX-3) == 0x0 && addbuff < hunk_additions_buffer+HUNK_MAX-2) {
                         addbuffcount = addbuff;
                         addbuff+=2;
                     }
