@@ -33,7 +33,6 @@ int main(int argc, char **argv)
         if((global_options & QUIET_OPTION) != QUIET_OPTION) {
             fprintf(stderr,"File Not Found.\n");
         }
-        fclose(diff_file);
         return EXIT_FAILURE;
     }
     fclose(diff_file);
