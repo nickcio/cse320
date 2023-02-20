@@ -24,13 +24,17 @@
 #define Strcpy (void)strcpy
 #define Strcat (void)strcat
 
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <ctype.h>
 #include <signal.h>
+#include <fcntl.h>
 
+#include "patch.h"
 /* constants */
 
 #define TRUE (1)
@@ -122,11 +126,8 @@ char *revision = Nullch;                /* prerequisite revision, if any */
 LINENUM locate_hunk();
 bool patch_match();
 bool similar();
-char *malloc();
 char *savestr();
-char *strcpy();
 char *strcat();
-char *sprintf();                /* usually */
 int my_exit();
 bool rev_in_string();
 char *fetchname();
@@ -158,7 +159,17 @@ char *ifetch();
 
 /* apply a context patch to a named file */
 
-orig_main(argc,argv)
+int set_signals()
+{
+    /*NOSTRICT*/
+    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
+        Signal(SIGHUP, my_exit);
+    /*NOSTRICT*/
+    if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+        Signal(SIGINT, my_exit);
+}
+
+int orig_main(argc,argv)
 int argc;
 char **argv;
 {
@@ -178,7 +189,7 @@ char **argv;
     /* parse switches */
     Argc = argc;
     Argv = argv;
-    get_some_switches();
+    //get_some_switches();
     
     /* make sure we clean up /tmp in case of disaster */
     set_signals();
@@ -272,42 +283,6 @@ char **argv;
     my_exit(0);
 }
 
-reinitialize_almost_everything()
-{
-    re_patch();
-    re_input();
-
-    input_lines = 0;
-    last_frozen_line = 0;
-
-    filec = 0;
-    if (filearg[0] != Nullch) {
-        free(filearg[0]);
-        filearg[0] = Nullch;
-    }
-
-    if (outname != Nullch) {
-        free(outname);
-        outname = Nullch;
-    }
-
-    last_offset = 0;
-
-    diff_type = 0;
-
-    if (revision != Nullch) {
-        free(revision);
-        revision = Nullch;
-    }
-
-    reverse = FALSE;
-
-    get_some_switches();
-
-    if (filec >= 2)
-        fatal("You may not change to a different patch file.\n");
-}
-
 get_some_switches()
 {
     register char *s;
@@ -383,6 +358,42 @@ get_some_switches()
     }
 }
 
+reinitialize_almost_everything()
+{
+    re_patch();
+    re_input();
+
+    input_lines = 0;
+    last_frozen_line = 0;
+
+    filec = 0;
+    if (filearg[0] != Nullch) {
+        free(filearg[0]);
+        filearg[0] = Nullch;
+    }
+
+    if (outname != Nullch) {
+        free(outname);
+        outname = Nullch;
+    }
+
+    last_offset = 0;
+
+    diff_type = 0;
+
+    if (revision != Nullch) {
+        free(revision);
+        revision = Nullch;
+    }
+
+    reverse = FALSE;
+
+    get_some_switches();
+
+    if (filec >= 2)
+        fatal("You may not change to a different patch file.\n");
+}
+
 LINENUM
 locate_hunk()
 {
@@ -407,7 +418,7 @@ locate_hunk()
         if (check_after && patch_match(first_guess,offset)) {
 #ifdef DEBUGGING
             if (debug & 1)
-                printf("Offset changing from %d to %d\n",last_offset,offset);
+                printf("Offset changing from %ld to %ld\n",last_offset,offset);
 #endif
             last_offset = offset;
             return first_guess+offset;
@@ -415,7 +426,7 @@ locate_hunk()
         else if (check_before && patch_match(first_guess,-offset)) {
 #ifdef DEBUGGING
             if (debug & 1)
-                printf("Offset changing from %d to %d\n",last_offset,-offset);
+                printf("Offset changing from %ld to %ld\n",last_offset,-offset);
 #endif
             last_offset = -offset;
             return first_guess-offset;
@@ -954,9 +965,7 @@ char *filename;
 
 /* keep (virtually) nothing in memory */
 
-plan_b(filename)
-char *filename;
-{
+void plan_b(char *filename){
     FILE *ifp;
     register int i = 0;
     register int maxlen = 1;
@@ -1068,9 +1077,7 @@ re_patch()
     p_indent = 0;
 }
 
-open_patch_file(filename)
-char *filename;
-{
+void open_patch_file(char *filename){
     if (filename == Nullch || !*filename || strEQ(filename,"-")) {
         pfp = fopen(TMPPATNAME,"w");
         if (pfp == Nullfp)
@@ -1418,7 +1425,7 @@ another_hunk()
         p_end = p_ptrn_lines + 1 + max - min + 1;
         p_newfirst = min;
         p_repl_lines = max - min + 1;
-        Sprintf(buf,"*** %d,%d\n", p_first, p_first + p_ptrn_lines - 1);
+        Sprintf(buf,"*** %ld,%ld\n", p_first, p_first + p_ptrn_lines - 1);
         p_line[0] = savestr(buf);
         p_char[0] = '*';
         for (i=1; i<=p_ptrn_lines; i++) {
@@ -1442,7 +1449,7 @@ another_hunk()
             if (*buf != '-')
                 fatal("--- expected at line %d of patch.\n", p_input_line);
         }
-        Sprintf(buf,"--- %d,%d\n",min,max);
+        Sprintf(buf,"--- %ld,%ld\n",min,max);
         p_line[i] = savestr(buf);
         p_char[i] = '=';
         for (i++; i<=p_end; i++) {
@@ -1730,15 +1737,7 @@ char *string;
     return FALSE;
 }
 
-set_signals()
-{
-    /*NOSTRICT*/
-    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
-        Signal(SIGHUP, my_exit);
-    /*NOSTRICT*/
-    if (signal(SIGINT, SIG_IGN) != SIG_IGN)
-        Signal(SIGINT, my_exit);
-}
+
 
 ignore_signals()
 {
