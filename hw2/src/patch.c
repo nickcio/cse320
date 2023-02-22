@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <assert.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -189,7 +190,7 @@ char **argv;
     /* parse switches */
     Argc = argc;
     Argv = argv;
-    //get_some_switches();
+    get_some_switches();
     
     /* make sure we clean up /tmp in case of disaster */
     set_signals();
@@ -283,8 +284,7 @@ char **argv;
     my_exit(0);
 }
 
-get_some_switches()
-{
+void get_some_switches(){
     register char *s;
 
     rejname[0] = '\0';
@@ -645,9 +645,7 @@ char *name;
         fatal("patch: can't create %s.\n",name);
 }
 
-move_file(from,to)
-char *from, *to;
-{
+void move_file(char *from,char *to){
     char bakname[512];
     register char *s;
     int fromfd;
@@ -727,9 +725,7 @@ char *from, *to;
     Unlink(from);
 }
 
-copy_file(from,to)
-char *from, *to;
-{
+void copy_file(char *from,char *to){
     int tofd;
     int fromfd;
     register int i;
@@ -747,9 +743,7 @@ char *from, *to;
     Close(tofd);
 }
 
-copy_till(lastline)
-register LINENUM lastline;
-{
+void copy_till(register LINENUM lastline){
     if (last_frozen_line > lastline)
         say("patch: misordered hunks! output will be garbled.\n");
     while (last_frozen_line < lastline) {
@@ -1095,8 +1089,7 @@ void open_patch_file(char *filename){
     next_intuit_at(0L);                 /* start at the beginning */
 }
 
-bool
-there_is_another_patch()
+bool there_is_another_patch()
 {
     bool no_input_file = (filearg[0] == Nullch);
     
@@ -1683,30 +1676,29 @@ ask(pat) char *pat; { ; }
 
 #else lint
 
-say(pat,arg1,arg2,arg3)
-char *pat;
-int arg1,arg2,arg3;
-{
-    fprintf(stderr,pat,arg1,arg2,arg3);
+void vsay(char *pat,va_list ap){
+    vfprintf(stderr,pat,ap);
     Fflush(stderr);
 }
 
-fatal(pat,arg1,arg2,arg3)
-char *pat;
-int arg1,arg2,arg3;
-{
-    say(pat,arg1,arg2,arg3);
+void say(char *pat,...){
+    va_list ap;
+    vfprintf(stderr,pat,ap);
+    Fflush(stderr);
+}
+
+void fatal(char *pat, ...){
+    va_list ap;
+    vsay(pat,ap);
     my_exit(1);
 }
 
-ask(pat,arg1,arg2,arg3)
-char *pat;
-int arg1,arg2,arg3;
-{
+void ask(char *pat,  ...){
     int ttyfd = open("/dev/tty",2);
     int r;
+    va_list ap;
 
-    say(pat,arg1,arg2,arg3);
+    vsay(pat,ap);
     if (ttyfd >= 0) {
         r = read(ttyfd, buf, sizeof buf);
         Close(ttyfd);
