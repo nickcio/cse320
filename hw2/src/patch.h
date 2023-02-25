@@ -26,3 +26,4 @@ void skip_to(long file_pos);
 void next_intuit_at(long file_pos);
 int intuit_diff_type();
 void dump_line(LINENUM line);
+char* savestr(register char *s);

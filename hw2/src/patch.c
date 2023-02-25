@@ -171,9 +171,7 @@ void set_signals()
         Signal(SIGINT, (__sighandler_t)my_exit);
 }
 
-int orig_main(argc,argv)
-int argc;
-char **argv;
+int orig_main(int argc,char **argv)
 {
     LINENUM where;
     int hunk = 0;
@@ -911,7 +909,7 @@ bool plan_a(char *filename)
             iline++;
     }
     /*NOSTRICT*/
-    i_ptr = (char **)malloc((MEM)((iline + 1) * sizeof(char *)));
+    i_ptr = (char **)malloc((MEM)((iline + 2) * sizeof(char *)));
     if (i_ptr == Null(char **)) {       /* shucks, it was a near thing */
         free((char *)i_womp);
         return FALSE;
@@ -1092,14 +1090,16 @@ bool there_is_another_patch()
             say("  I can't seem to find a patch in there anywhere.\n");
         return FALSE;
     }
-    if (verbose)
+    if (verbose) {
         say("  %sooks like %s to me...\n",
             (p_base == 0L ? "L" : "The next patch l"),
             diff_type == CONTEXT_DIFF ? "a context diff" :
             diff_type == NORMAL_DIFF ? "a normal diff" :
             "an ed script" );
-    if (p_indent && verbose)
+    }
+    if (p_indent && verbose) {
         say("(Patch is indented %d space%s.)\n",p_indent,p_indent==1?"":"s");
+    }
     skip_to(pch_start());
     if (no_input_file) {
         if (filearg[0] == Nullch) {
@@ -1214,7 +1214,7 @@ int intuit_diff_type()
 char* fetchname(char *at)
 {
     char *s = savestr(at);
-    char *name;
+    char *name = NULL;
     register char *t;
     char tmpbuf[200];
 
@@ -1591,31 +1591,29 @@ char pch_char(LINENUM line)
     return p_char[line];
 }
 
-char *
-pfetch(line)
-LINENUM line;
+char* pfetch(LINENUM line)
 {
     return p_line[line];
 }
 
-LINENUM
-pch_hunk_beg()
+LINENUM pch_hunk_beg()
 {
     return p_input_line - p_end - 1;
 }
 
 char* savestr(register char *s)
 {
-    register char  *rv,
-                   *t;
-
+    register char *rv = NULL;
+    register char *t = NULL;
     t = s;
-    while (*t++)
-    rv = malloc((MEM) (t - s));
-    if (rv == NULL)
-        fatal ("patch: out of memory (savestr)\n");
+    while (*t++) {
+        rv = (char*)malloc((MEM) (t - s+1));
+    }
+    if (rv == NULL) {
+        fatal("patch: out of memory (savestr)\n");
+    }
     t = rv;
-    while ((*t++) == (*s++));
+    while ((*t++ = *s++));
     return rv;
 }
 
@@ -1641,17 +1639,21 @@ ask(char *pat){ ; }
 
 void vsay(char *pat,va_list ap){
     vfprintf(stderr,pat,ap);
+    va_end(ap);
     Fflush(stderr);
 }
 
 void say(char *pat,...){
     va_list ap;
+    va_start(ap,pat);
     vfprintf(stderr,pat,ap);
+    va_end(ap);
     Fflush(stderr);
 }
 
 void fatal(char *pat, ...){
     va_list ap;
+    va_start(ap,pat);
     vsay(pat,ap);
     my_exit(1);
 }
@@ -1660,7 +1662,7 @@ void ask(char *pat,  ...){
     int ttyfd = open("/dev/tty",2);
     int r;
     va_list ap;
-
+    va_start(ap,pat);
     vsay(pat,ap);
     if (ttyfd >= 0) {
         r = read(ttyfd, buf, sizeof buf);
@@ -1673,9 +1675,7 @@ void ask(char *pat,  ...){
 }
 #endif
 
-bool
-rev_in_string(string)
-char *string;
+bool rev_in_string(char *string)
 {
     register char *s;
     register int patlen;
