@@ -562,7 +562,7 @@ void reinitialize_almost_everything()
 
     reverse = FALSE;
 
-    get_some_switches();
+    //get_some_switches();
 
     if (filec >= 2)
         fatal("You may not change to a different patch file.\n");
@@ -987,6 +987,9 @@ void re_input()
         /*NOSTRICT*/
         if (i_ptr != Null(char**))
             free((char *)i_ptr);
+        if(i_womp != Nullch) {
+            free(i_womp);
+        }
         i_womp = Nullch;
         i_ptr = Null(char **);
     }
