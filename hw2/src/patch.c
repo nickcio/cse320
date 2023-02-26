@@ -35,6 +35,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <getopt.h>
 
 #include "patch.h"
 /* constants */
@@ -159,6 +160,37 @@ char *pgets();
 
 char *ifetch();
 
+/* patch abstract type */
+
+static long p_filesize;                 /* size of the patch file */
+static LINENUM p_first;                 /* 1st line number */
+static LINENUM p_newfirst;              /* 1st line number of replacement */
+static LINENUM p_ptrn_lines;            /* # lines in pattern */
+static LINENUM p_repl_lines;            /* # lines in replacement text */
+static LINENUM p_end = -1;              /* last line in hunk */
+static LINENUM p_max;                   /* max allowed value of p_end */
+static LINENUM p_context = 3;           /* # of context lines */
+static LINENUM p_input_line = 0;        /* current line # from patch file */
+static char *p_line[MAXHUNKSIZE];       /* the text of the hunk */
+static char p_char[MAXHUNKSIZE];        /* +, -, and ! */
+static int p_len[MAXHUNKSIZE];          /* length of each line */
+static int p_indent;                    /* indent to patch */
+static long p_base;                     /* where to intuit this time */
+static long p_start;                    /* where intuit found a patch */
+
+/* input file with indexable lines abstract type */
+
+bool using_plan_a = TRUE;
+static long i_size;                     /* size of the input file */
+static char *i_womp = Nullch;                 /* plan a buffer for entire file */
+static char **i_ptr;                    /* pointers to lines in i_womp */
+
+static int tifd = -1;                   /* plan b virtual string array */
+static char *tibuf[2];                  /* plan b buffers */
+static LINENUM tiline[2] = {-1,-1};     /* 1st line in each buffer */
+static LINENUM lines_per_buf;           /* how many lines per buffer */
+static int tireclen;                    /* length of records in tmp file */
+
 /* apply a context patch to a named file */
 
 void set_signals()
@@ -261,7 +293,7 @@ int orig_main(int argc,char **argv)
                 }
             }
         }
-    
+
         assert(hunk);
     
         /* finish spewing out the new file */
@@ -283,10 +315,141 @@ int orig_main(int argc,char **argv)
         }
         set_signals();
     }
+
+    fclose(pfp);
+    free_almost_everything();
     my_exit(0);
 }
 
+void free_almost_everything()
+{
+    re_patch();
+    re_input();
+
+    input_lines = 0;
+    last_frozen_line = 0;
+
+    filec = 0;
+    if (filearg[0] != Nullch) {
+        free(filearg[0]);
+        filearg[0] = Nullch;
+    }
+
+    if (outname != Nullch) {
+        free(outname);
+        outname = Nullch;
+    }
+
+    if(i_womp != Nullch) {
+        free(i_womp);
+    }
+
+    last_offset = 0;
+
+    diff_type = 0;
+
+    if (revision != Nullch) {
+        free(revision);
+        revision = Nullch;
+    }
+
+    reverse = FALSE;
+
+    if (filec >= 2)
+        fatal("You may not change to a different patch file.\n");
+}
+
 void get_some_switches(){
+    rejname[0] = '\0';
+    static struct option long_options[] = {
+        {"backup-extension",no_argument,0,'b'},
+        {"context-diff",no_argument,0,'c'},
+        {"directory",required_argument,0,'d'},
+        {"do-defines",required_argument,0,'D'},
+        {"ed-script",no_argument,0,'e'},
+        {"loose-matching",no_argument,0,'l'},
+        {"normal-diff",no_argument,0,'n'},
+        {"output-file",required_argument,0,'o'},
+        {"pathnames",required_argument,0,'p'},
+        {"reject-file",required_argument,0,'r'},
+        {"reverse",no_argument,0,'R'},
+        {"silent",no_argument,0,'s'},
+        {"debug",required_argument,0,'x'},
+        {0,0,0,0}
+    };
+    int c;
+    int option_ind = 0;
+    int counter = Argc;
+    while(counter) {
+        c = getopt_long(Argc,Argv,"bcd:D:elno:p:r:Rsx:",long_options,&option_ind);
+        fprintf(stderr," CURRENT FLAG: %d %c %s ! ",c,c,optarg);
+        if(c == -1)
+            break;
+        switch(c) {
+            case 'b':
+                origext = savestr(optarg);
+                //Argc--,Argv++;
+                break;
+            case 'c':
+                diff_type = CONTEXT_DIFF;
+                break;
+            case 'd':
+                if (chdir(optarg) < 0)
+                    fatal("Can't cd to %s.\n",Argv[1]);
+                //Argc--,Argv++;
+                break;
+            case 'D':
+                do_defines++;
+                Sprintf(if_defined, "#ifdef %s\n", optarg);
+                Sprintf(not_defined, "#ifndef %s\n", optarg);
+                Sprintf(end_defined, "#endif %s\n", optarg);
+                //Argc--,Argv++;
+                break;
+            case 'e':
+                diff_type = ED_DIFF;
+                break;
+            case 'l':
+                canonicalize = TRUE;
+                break;
+            case 'n':
+                diff_type = NORMAL_DIFF;
+                break;
+            case 'o':
+                outname = savestr(optarg);
+                //Argc--,Argv++;
+                break;
+            case 'p':
+                usepath = TRUE; /* do not strip path names */
+                break;
+            case 'r':
+                Strcpy(rejname,optarg);
+                //Argc--,Argv++;
+                break;
+            case 'R':
+                reverse = TRUE;
+                break;
+            case 's':
+                verbose = FALSE;
+                break;
+            case 'x':
+                debug = atoi(optarg);
+                break;
+            default:
+                fatal("Unrecognized switch: %s %d/%d \n",Argv[0],counter,Argc);
+        }
+        counter--;
+    }
+    if(optind < Argc) {
+        while(optind < Argc) {
+            if (filec == MAXFILEC)
+                fatal("Too many file arguments.\n");
+            fprintf(stderr," CURRENT THING: %s ! ",Argv[optind]);
+            filearg[filec++] = savestr(Argv[optind++]);
+        }
+    }
+}
+
+void get_some_switches_OLD(){
     register char *s;
 
     rejname[0] = '\0';
@@ -300,6 +463,7 @@ void get_some_switches(){
         if (*s != '-' || !s[1]) {
             if (filec == MAXFILEC)
                 fatal("Too many file arguments.\n");
+            //free(filearg[filec++]);
             filearg[filec++] = savestr(s);
         }
         else {
@@ -807,18 +971,6 @@ bool similar(register char *a,register char *b,register int len)
                                         /* since there is always a \n */
 }
 
-/* input file with indexable lines abstract type */
-
-bool using_plan_a = TRUE;
-static long i_size;                     /* size of the input file */
-static char *i_womp;                    /* plan a buffer for entire file */
-static char **i_ptr;                    /* pointers to lines in i_womp */
-
-static int tifd = -1;                   /* plan b virtual string array */
-static char *tibuf[2];                  /* plan b buffers */
-static LINENUM tiline[2] = {-1,-1};     /* 1st line in each buffer */
-static LINENUM lines_per_buf;           /* how many lines per buffer */
-static int tireclen;                    /* length of records in tmp file */
 
 void re_input()
 {
@@ -843,9 +995,12 @@ void re_input()
 }
 
 void scan_input(char *filename){
-    bool plan_a();
+    if(i_womp != Nullch) {
+        free(i_womp);
+    }
+    bool p = plan_a(filename);
 
-    if (!plan_a(filename))
+    if (!p)
         plan_b(filename);
 }
 
@@ -885,9 +1040,14 @@ bool plan_a(char *filename)
         fatal("%s is not a normal file--can't patch.\n",filename);
     i_size = filestat.st_size;
     /*NOSTRICT*/
+    if(i_womp != Nullch) {
+        free(i_womp);
+    }
     i_womp = malloc((MEM)(i_size+2));
-    if (i_womp == Nullch)
+    if (i_womp == Nullch) {
+        free(i_womp);
         return FALSE;
+    }
     if ((ifd = open(filename,0)) < 0)
         fatal("Can't open file %s\n",filename);
     /*NOSTRICT*/
@@ -1022,23 +1182,6 @@ char* ifetch(register LINENUM line,int whichbuf){/* ignored when file in memory 
     }
 }
 
-/* patch abstract type */
-
-static long p_filesize;                 /* size of the patch file */
-static LINENUM p_first;                 /* 1st line number */
-static LINENUM p_newfirst;              /* 1st line number of replacement */
-static LINENUM p_ptrn_lines;            /* # lines in pattern */
-static LINENUM p_repl_lines;            /* # lines in replacement text */
-static LINENUM p_end = -1;              /* last line in hunk */
-static LINENUM p_max;                   /* max allowed value of p_end */
-static LINENUM p_context = 3;           /* # of context lines */
-static LINENUM p_input_line = 0;        /* current line # from patch file */
-static char *p_line[MAXHUNKSIZE];       /* the text of the hunk */
-static char p_char[MAXHUNKSIZE];        /* +, -, and ! */
-static int p_len[MAXHUNKSIZE];          /* length of each line */
-static int p_indent;                    /* indent to patch */
-static long p_base;                     /* where to intuit this time */
-static long p_start;                    /* where intuit found a patch */
 
 void re_patch()
 {
@@ -1072,7 +1215,7 @@ void open_patch_file(char *filename){
 bool there_is_another_patch()
 {
     bool no_input_file = (filearg[0] == Nullch);
-    
+
     if (p_base != 0L && p_base >= p_filesize) {
         if (verbose)
             say("done\n");
@@ -1265,8 +1408,7 @@ void skip_to(long file_pos)
         Fseek(pfp,file_pos,0);
 }
 
-bool
-another_hunk()
+bool another_hunk()
 {
     register char *s;
     char *ret;
@@ -1455,12 +1597,7 @@ another_hunk()
     return TRUE;
 }
 
-char *
-pgets(bf,sz,fp)
-char *bf;
-int sz;
-FILE *fp;
-{
+char * pgets(char *bf,int sz,FILE *fp){
     char *ret = fgets(bf,sz,fp);
     register char *s;
     register int indent = 0;
@@ -1484,7 +1621,7 @@ void pch_swap()
     char tp_char[MAXHUNKSIZE];          /* +, -, and ! */
     int tp_len[MAXHUNKSIZE];            /* length of each line */
     register LINENUM i, n;
-    bool blankline;
+    bool blankline = FALSE;
     register char *s;
 
     i = p_first;
@@ -1606,9 +1743,10 @@ char* savestr(register char *s)
     register char *rv = NULL;
     register char *t = NULL;
     t = s;
-    while (*t++) {
-        rv = (char*)malloc((MEM) (t - s+1));
-    }
+    while (*t++);
+    rv = (char*)malloc((MEM) (t - s+1));
+
+    //fprintf(stderr,"Hm! %ld ",(t-s+1));
     if (rv == NULL) {
         fatal("patch: out of memory (savestr)\n");
     }
