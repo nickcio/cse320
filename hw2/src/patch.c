@@ -237,13 +237,13 @@ int orig_main(int argc,char **argv)
     
         /* initialize the patched file */
         init_output(TMPOUTNAME);
-    
+
         /* for ed script just up and do it and exit */
         if (diff_type == ED_DIFF) {
             do_ed_script();
             continue;
         }
-    
+
         /* initialize reject file */
         init_reject(TMPREJNAME);
     
@@ -1256,14 +1256,21 @@ bool there_is_another_patch()
     }
     skip_to(pch_start());
     if (no_input_file) {
+        //fprintf(stderr,"BUF: %s\n",buf);
         if (filearg[0] == Nullch) {
             ask("File to patch: ");
-            filearg[0] = fetchname(buf);
+            if(buf != Nullch) {
+                filearg[0] = fetchname(buf);
+            }
+            else{
+                fatal("patch file not found\n");
+            }
         }
         else if (verbose) {
             say("Patching file %s...\n",filearg[0]);
         }
     }
+
     return TRUE;
 }
 
@@ -1276,8 +1283,8 @@ int intuit_diff_type()
     bool this_line_is_command = FALSE;
     register int indent;
     register char *s, *t;
-    char *oldname;
-    char *newname;
+    char *oldname = Nullch;
+    char *newname = Nullch;
     bool no_filearg = (filearg[0] == Nullch);
 
     Fseek(pfp,p_base,0);
@@ -1310,21 +1317,42 @@ int intuit_diff_type()
             first_command_line = this_line;
             p_indent = indent;          /* assume this for now */
         }
-        if (strnEQ(s,"*** ",4))
+        if (strnEQ(s,"*** ",4)) {
+            if(oldname != Nullch) {
+                free(oldname);
+                oldname = Nullch;
+            }
             oldname = fetchname(s+4);
+        }
         else if (strnEQ(s,"--- ",4)) {
+            if(newname != Nullch) {
+                free(newname);
+                newname = Nullch;
+            }
             newname = fetchname(s+4);
             if (no_filearg) {
                 if (oldname && newname) {
-                    if (strlen(oldname) < strlen(newname))
+                    if (strlen(oldname) < strlen(newname)) {
+                        free(newname);
+                        newname = Nullch;
+                        free(filearg[0]);
                         filearg[0] = oldname;
-                    else
+                    }
+                    else {
+                        free(oldname);
+                        oldname = Nullch;
+                        free(filearg[0]);
                         filearg[0] = newname;
+                    }
                 }
-                else if (oldname)
+                else if (oldname) {
+                    free(filearg[0]);
                     filearg[0] = oldname;
-                else if (newname)
+                }
+                else if (newname) {
+                    free(filearg[0]);
                     filearg[0] = newname;
+                }
             }
         }
         else if (strnEQ(s,"Index:",6)) {
@@ -1368,10 +1396,10 @@ int intuit_diff_type()
 char* fetchname(char *at)
 {
     char *s = savestr(at);
-    char *name = NULL;
+    char *name = Nullch;
     register char *t;
     char tmpbuf[200];
-
+    
     for (t=s; isspace(*t); t++) ;
     name = t;
     for (; *t && !isspace(*t); t++)
@@ -1379,6 +1407,7 @@ char* fetchname(char *at)
             if (*t == '/')
                 name = t+1;
     *t = '\0';
+    
     name = savestr(name);
     Sprintf(tmpbuf,"RCS/%s",name);
     free(s);
@@ -1754,9 +1783,11 @@ char* savestr(register char *s)
     register char *rv = NULL;
     register char *t = NULL;
     t = s;
+    if(t == NULL) {
+        fatal("patch file not found\n");
+    }
     while (*t++);
     rv = (char*)malloc((MEM) (t - s+1));
-
     //fprintf(stderr,"Hm! %ld ",(t-s+1));
     if (rv == NULL) {
         fatal("patch: out of memory (savestr)\n");
@@ -1817,8 +1848,9 @@ void ask(char *pat,  ...){
         r = read(ttyfd, buf, sizeof buf);
         Close(ttyfd);
     }
-    else
+    else {
         r = read(2, buf, sizeof buf);
+    }
     if (r <= 0)
         buf[0] = 0;
 }
