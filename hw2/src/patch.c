@@ -335,6 +335,15 @@ void free_almost_everything()
         filearg[0] = Nullch;
     }
 
+    int countf = 0;
+    while(countf < MAXFILEC) {
+        if(filearg[countf] != Nullch) {
+            free(filearg[countf]);
+            filearg[countf]=Nullch;
+        }
+        countf++;
+    }
+
     if (outname != Nullch) {
         free(outname);
         outname = Nullch;
@@ -381,11 +390,18 @@ void get_some_switches(){
     int option_ind = 0;
     int counter = Argc;
     while(counter) {
-        c = getopt_long(Argc,Argv,"bcd:D:elno:p:r:Rsx:",long_options,&option_ind);
-        fprintf(stderr," CURRENT FLAG: %d %c %s ! ",c,c,optarg);
-        if(c == -1)
+        c = getopt_long(Argc,Argv,"-bcd:D:elno:p:r:Rsx:",long_options,&option_ind);
+        //fprintf(stderr," CURRENT FLAG: %d %c %s ! ",c,c,optarg);
+        if(c == -1) {
             break;
+        }
         switch(c) {
+            case '\1':
+                if (filec == MAXFILEC)
+                    fatal("Too many file arguments.\n");
+                //fprintf(stderr," CURRENT THING: %s ! ",Argv[optind]);
+                filearg[filec++] = savestr(optarg);
+                break;
             case 'b':
                 origext = savestr(optarg);
                 //Argc--,Argv++;
@@ -435,17 +451,9 @@ void get_some_switches(){
                 debug = atoi(optarg);
                 break;
             default:
-                fatal("Unrecognized switch: %s %d/%d \n",Argv[0],counter,Argc);
+                fatal("Unrecognized switch: %c %s %d/%d \n",c,Argv[0],counter,Argc);
         }
         counter--;
-    }
-    if(optind < Argc) {
-        while(optind < Argc) {
-            if (filec == MAXFILEC)
-                fatal("Too many file arguments.\n");
-            fprintf(stderr," CURRENT THING: %s ! ",Argv[optind]);
-            filearg[filec++] = savestr(Argv[optind++]);
-        }
     }
 }
 
