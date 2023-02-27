@@ -263,6 +263,7 @@ int orig_main(int argc,char **argv)
                 pch_swap();
                 reverse = !reverse;
                 where = locate_hunk();  /* try again */
+                
                 if (where == Null(LINENUM)) {
                     pch_swap();         /* no, put it back to normal */
                     reverse = !reverse;
@@ -895,17 +896,20 @@ bool patch_match(LINENUM base,LINENUM offset)
     register LINENUM pline;
     register LINENUM iline;
     register LINENUM pat_lines = pch_ptrn_lines();
+    char *i_one;
+    char *p_one;
+    int p_len;
 
     for (pline = 1, iline=base+offset; pline <= pat_lines; pline++,iline++) {
+        i_one = ifetch(iline,(offset >= 0));
+        p_one = pfetch(pline);
+        p_len = pch_line_len(pline);
+
         if (canonicalize) {
-            if (!similar(ifetch(iline,(offset >= 0)),
-                         pfetch(pline),
-                         pch_line_len(pline) ))
+            if (!similar(i_one,p_one,p_len))
                 return FALSE;
         }
-        else if (strnNE(ifetch(iline,(offset >= 0)),
-                   pfetch(pline),
-                   pch_line_len(pline) ))
+        else if (strnNE(i_one,p_one,p_len))
             return FALSE;
     }
     return TRUE;
@@ -943,7 +947,7 @@ void re_input()
         /*NOSTRICT*/
         if (i_ptr != Null(char**))
             free((char *)i_ptr);
-        free(i_womp);
+        free((char *)i_womp);
         i_womp = Nullch;
         i_ptr = Null(char **);
     }
@@ -1718,7 +1722,7 @@ char* savestr(register char *s)
         fatal("patch file not found\n");
     }
     while (*t++);
-    rv = (char*)malloc((MEM) (t - s+1));
+    rv = (char*)malloc((MEM) (t - s));
     if (rv == NULL) {
         fatal("patch: out of memory (savestr)\n");
     }
