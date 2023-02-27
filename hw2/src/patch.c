@@ -222,7 +222,7 @@ int orig_main(int argc,char **argv)
         there_is_another_patch();
         reinitialize_almost_everything()
     ) {                                 /* for each patch in patch file */
-
+        //fprintf(stderr,"files: %s %s %s\n",filearg[0],filearg[1],outname);
         if (outname == Nullch)
             outname = savestr(filearg[0]);
     
