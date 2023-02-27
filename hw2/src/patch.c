@@ -1331,17 +1331,11 @@ int intuit_diff_type()
             p_indent = indent;          /* assume this for now */
         }
         if (strnEQ(s,"*** ",4)) {
-            if(oldname != Nullch) {
-                free(oldname);
-                oldname = Nullch;
-            }
+            free(oldname);
             oldname = fetchname(s+4);
         }
         else if (strnEQ(s,"--- ",4)) {
-            if(newname != Nullch) {
-                free(newname);
-                newname = Nullch;
-            }
+            free(newname);
             newname = fetchname(s+4);
             if (no_filearg) {
                 if (oldname && newname) {
@@ -1363,14 +1357,21 @@ int intuit_diff_type()
                     filearg[0] = oldname;
                 }
                 else if (newname) {
+                    free(oldname);
                     free(filearg[0]);
                     filearg[0] = newname;
                 }
             }
+            else{
+                free(oldname);
+                free(newname);
+            }
         }
         else if (strnEQ(s,"Index:",6)) {
-            if (no_filearg) 
+            if (no_filearg) {
+                free(filearg[0]);
                 filearg[0] = fetchname(s+6);
+            }
                                         /* this filearg might get limboed */
         }
         else if (strnEQ(s,"Prereq:",7)) {
@@ -1422,8 +1423,9 @@ char* fetchname(char *at)
     *t = '\0';
     
     name = savestr(name);
-    Sprintf(tmpbuf,"RCS/%s",name);
     free(s);
+    Sprintf(tmpbuf,"RCS/%s",name);
+    
     if (stat(name,&filestat) < 0) {
         Strcat(tmpbuf,RCSSUFFIX);
         if (stat(tmpbuf,&filestat) < 0 && stat(tmpbuf+4,&filestat) < 0) {
