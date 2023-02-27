@@ -22,6 +22,7 @@ void pch_swap();
 void abort_hunk();
 void apply_hunk(LINENUM where);
 void spew_output();
+void set_signals();
 void ignore_signals();
 void re_patch();
 void re_input();

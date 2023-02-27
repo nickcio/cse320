@@ -192,15 +192,7 @@ char *ifetch();
 
 /* apply a context patch to a named file */
 
-void set_signals()
-{
-    /*NOSTRICT*/
-    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
-        Signal(SIGHUP, (__sighandler_t)my_exit);
-    /*NOSTRICT*/
-    if (signal(SIGINT, SIG_IGN) != SIG_IGN)
-        Signal(SIGINT, (__sighandler_t)my_exit);
-}
+
 
 int orig_main(int argc,char **argv)
 {
@@ -1810,7 +1802,15 @@ bool rev_in_string(char *string)
     return FALSE;
 }
 
-
+void set_signals()
+{
+    /*NOSTRICT*/
+    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
+        Signal(SIGHUP, (__sighandler_t)my_exit);
+    /*NOSTRICT*/
+    if (signal(SIGINT, SIG_IGN) != SIG_IGN)
+        Signal(SIGINT, (__sighandler_t)my_exit);
+}
 
 void ignore_signals()
 {
