@@ -258,11 +258,15 @@ int orig_main(int argc,char **argv)
         failed = 0;
         while (another_hunk()) {
             hunk++;
+            fprintf(stderr,"First Where\n");
+            Fflush(stderr);
             where = locate_hunk();
             if (hunk == 1 && where == Null(LINENUM)) {
                                         /* dwim for reversed patch? */
                 pch_swap();
                 reverse = !reverse;
+                fprintf(stderr,"Second Where\n");
+                Fflush(stderr);
                 where = locate_hunk();  /* try again */
                 if (where == Null(LINENUM)) {
                     pch_swap();         /* no, put it back to normal */
@@ -571,7 +575,7 @@ void reinitialize_almost_everything()
 LINENUM locate_hunk()
 {
     register LINENUM first_guess = pch_first() + last_offset;
-    register LINENUM offset;
+    register LINENUM offset = 1;
     LINENUM pat_lines = pch_ptrn_lines();
     register LINENUM max_pos_offset = input_lines - first_guess
                                 - pat_lines + 1; 
@@ -594,6 +598,8 @@ LINENUM locate_hunk()
                 printf("Offset changing from %ld to %ld\n",last_offset,offset);
 #endif
             last_offset = offset;
+            fprintf(stderr,"First Return\n");
+            Fflush(stderr);
             return first_guess+offset;
         }
         else if (check_before && patch_match(first_guess,-offset)) {
@@ -602,10 +608,15 @@ LINENUM locate_hunk()
                 printf("Offset changing from %ld to %ld\n",last_offset,-offset);
 #endif
             last_offset = -offset;
+            fprintf(stderr,"Second Checkpoint\n");
+            Fflush(stderr);
             return first_guess-offset;
         }
-        else if (!check_before && !check_after)
+        else if (!check_before && !check_after) {
+            fprintf(stderr,"Third Checkpoint\n");
+            Fflush(stderr);
             return Null(LINENUM);
+        }
     }
 }
 
@@ -939,17 +950,19 @@ bool patch_match(LINENUM base,LINENUM offset)
     register LINENUM pline;
     register LINENUM iline;
     register LINENUM pat_lines = pch_ptrn_lines();
+    char* i_one;
+    char* p_one;
+    int p_len;
 
     for (pline = 1, iline=base+offset; pline <= pat_lines; pline++,iline++) {
+        i_one = ifetch(iline,(offset >= 0));
+        p_one = pfetch(pline);
+        p_len = pch_line_len(pline);
         if (canonicalize) {
-            if (!similar(ifetch(iline,(offset >= 0)),
-                         pfetch(pline),
-                         pch_line_len(pline) ))
+            if (!similar(i_one,p_one,p_len))
                 return FALSE;
         }
-        else if (strnNE(ifetch(iline,(offset >= 0)),
-                   pfetch(pline),
-                   pch_line_len(pline) ))
+        else if (strnNE(i_one,p_one,p_len))
             return FALSE;
     }
     return TRUE;
