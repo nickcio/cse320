@@ -36,7 +36,6 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <getopt.h>
-
 #include "patch.h"
 /* constants */
 
@@ -156,10 +155,6 @@ char pch_char();
 char *pfetch();
 char *pgets();
 
-/* input file type */
-
-char *ifetch();
-
 /* patch abstract type */
 
 static long p_filesize;                 /* size of the patch file */
@@ -182,7 +177,7 @@ static long p_start;                    /* where intuit found a patch */
 
 bool using_plan_a = TRUE;
 static long i_size;                     /* size of the input file */
-static char *i_womp = Nullch;                 /* plan a buffer for entire file */
+static char *i_womp;                    /* plan a buffer for entire file */
 static char **i_ptr;                    /* pointers to lines in i_womp */
 
 static int tifd = -1;                   /* plan b virtual string array */
@@ -190,6 +185,10 @@ static char *tibuf[2];                  /* plan b buffers */
 static LINENUM tiline[2] = {-1,-1};     /* 1st line in each buffer */
 static LINENUM lines_per_buf;           /* how many lines per buffer */
 static int tireclen;                    /* length of records in tmp file */
+
+/* input file type */
+
+char *ifetch();
 
 /* apply a context patch to a named file */
 
@@ -237,13 +236,13 @@ int orig_main(int argc,char **argv)
     
         /* initialize the patched file */
         init_output(TMPOUTNAME);
-
+    
         /* for ed script just up and do it and exit */
         if (diff_type == ED_DIFF) {
             do_ed_script();
             continue;
         }
-
+    
         /* initialize reject file */
         init_reject(TMPREJNAME);
     
@@ -258,15 +257,11 @@ int orig_main(int argc,char **argv)
         failed = 0;
         while (another_hunk()) {
             hunk++;
-            fprintf(stderr,"First Where\n");
-            Fflush(stderr);
             where = locate_hunk();
             if (hunk == 1 && where == Null(LINENUM)) {
                                         /* dwim for reversed patch? */
                 pch_swap();
                 reverse = !reverse;
-                fprintf(stderr,"Second Where\n");
-                Fflush(stderr);
                 where = locate_hunk();  /* try again */
                 if (where == Null(LINENUM)) {
                     pch_swap();         /* no, put it back to normal */
@@ -297,7 +292,7 @@ int orig_main(int argc,char **argv)
                 }
             }
         }
-
+    
         assert(hunk);
     
         /* finish spewing out the new file */
@@ -319,57 +314,10 @@ int orig_main(int argc,char **argv)
         }
         set_signals();
     }
-
-    fclose(pfp);
-    free_almost_everything();
+    if(pfp) {
+        fclose(pfp);
+    }
     my_exit(0);
-}
-
-void free_almost_everything()
-{
-    re_patch();
-    re_input();
-
-    input_lines = 0;
-    last_frozen_line = 0;
-
-    filec = 0;
-    if (filearg[0] != Nullch) {
-        free(filearg[0]);
-        filearg[0] = Nullch;
-    }
-
-    int countf = 0;
-    while(countf < MAXFILEC) {
-        if(filearg[countf] != Nullch) {
-            free(filearg[countf]);
-            filearg[countf]=Nullch;
-        }
-        countf++;
-    }
-
-    if (outname != Nullch) {
-        free(outname);
-        outname = Nullch;
-    }
-
-    if(i_womp != Nullch) {
-        free(i_womp);
-    }
-
-    last_offset = 0;
-
-    diff_type = 0;
-
-    if (revision != Nullch) {
-        free(revision);
-        revision = Nullch;
-    }
-
-    reverse = FALSE;
-
-    if (filec >= 2)
-        fatal("You may not change to a different patch file.\n");
 }
 
 void get_some_switches(){
@@ -383,7 +331,7 @@ void get_some_switches(){
         {"loose-matching",no_argument,0,'l'},
         {"normal-diff",no_argument,0,'n'},
         {"output-file",required_argument,0,'o'},
-        {"pathnames",required_argument,0,'p'},
+        {"pathnames",no_argument,0,'p'},
         {"reject-file",required_argument,0,'r'},
         {"reverse",no_argument,0,'R'},
         {"silent",no_argument,0,'s'},
@@ -393,8 +341,11 @@ void get_some_switches(){
     int c;
     int option_ind = 0;
     int counter = Argc;
+    if(!Argc) {
+        return;
+    }
     while(counter) {
-        c = getopt_long(Argc,Argv,"-bcd:D:elno:p:r:Rsx:",long_options,&option_ind);
+        c = getopt_long(Argc,Argv,"-bcd:D:elno:pr:Rsx:",long_options,&option_ind);
         //fprintf(stderr," CURRENT FLAG: %d %c %s ! ",c,c,optarg);
         if(c == -1) {
             break;
@@ -461,7 +412,8 @@ void get_some_switches(){
     }
 }
 
-void get_some_switches_OLD(){
+
+void get_some_switches2(){
     register char *s;
 
     rejname[0] = '\0';
@@ -475,7 +427,6 @@ void get_some_switches_OLD(){
         if (*s != '-' || !s[1]) {
             if (filec == MAXFILEC)
                 fatal("Too many file arguments.\n");
-            //free(filearg[filec++]);
             filearg[filec++] = savestr(s);
         }
         else {
@@ -510,6 +461,7 @@ void get_some_switches_OLD(){
                 break;
             case 'o':
                 outname = savestr(Argv[1]);
+                fprintf(stderr,"OUTNAME: %s\n",outname);
                 Argc--,Argv++;
                 break;
             case 'p':
@@ -566,7 +518,7 @@ void reinitialize_almost_everything()
 
     reverse = FALSE;
 
-    //get_some_switches();
+    get_some_switches();
 
     if (filec >= 2)
         fatal("You may not change to a different patch file.\n");
@@ -575,7 +527,7 @@ void reinitialize_almost_everything()
 LINENUM locate_hunk()
 {
     register LINENUM first_guess = pch_first() + last_offset;
-    register LINENUM offset = 1;
+    register LINENUM offset;
     LINENUM pat_lines = pch_ptrn_lines();
     register LINENUM max_pos_offset = input_lines - first_guess
                                 - pat_lines + 1; 
@@ -598,8 +550,6 @@ LINENUM locate_hunk()
                 printf("Offset changing from %ld to %ld\n",last_offset,offset);
 #endif
             last_offset = offset;
-            fprintf(stderr,"First Return\n");
-            Fflush(stderr);
             return first_guess+offset;
         }
         else if (check_before && patch_match(first_guess,-offset)) {
@@ -608,15 +558,10 @@ LINENUM locate_hunk()
                 printf("Offset changing from %ld to %ld\n",last_offset,-offset);
 #endif
             last_offset = -offset;
-            fprintf(stderr,"Second Checkpoint\n");
-            Fflush(stderr);
             return first_guess-offset;
         }
-        else if (!check_before && !check_after) {
-            fprintf(stderr,"Third Checkpoint\n");
-            Fflush(stderr);
+        else if (!check_before && !check_after)
             return Null(LINENUM);
-        }
     }
 }
 
@@ -950,19 +895,17 @@ bool patch_match(LINENUM base,LINENUM offset)
     register LINENUM pline;
     register LINENUM iline;
     register LINENUM pat_lines = pch_ptrn_lines();
-    char* i_one;
-    char* p_one;
-    int p_len;
 
     for (pline = 1, iline=base+offset; pline <= pat_lines; pline++,iline++) {
-        i_one = ifetch(iline,(offset >= 0));
-        p_one = pfetch(pline);
-        p_len = pch_line_len(pline);
         if (canonicalize) {
-            if (!similar(i_one,p_one,p_len))
+            if (!similar(ifetch(iline,(offset >= 0)),
+                         pfetch(pline),
+                         pch_line_len(pline) ))
                 return FALSE;
         }
-        else if (strnNE(i_one,p_one,p_len))
+        else if (strnNE(ifetch(iline,(offset >= 0)),
+                   pfetch(pline),
+                   pch_line_len(pline) ))
             return FALSE;
     }
     return TRUE;
@@ -1000,9 +943,7 @@ void re_input()
         /*NOSTRICT*/
         if (i_ptr != Null(char**))
             free((char *)i_ptr);
-        if(i_womp != Nullch) {
-            free(i_womp);
-        }
+        free(i_womp);
         i_womp = Nullch;
         i_ptr = Null(char **);
     }
@@ -1019,9 +960,6 @@ void re_input()
 }
 
 void scan_input(char *filename){
-    if(i_womp != Nullch) {
-        free(i_womp);
-    }
     bool p = plan_a(filename);
 
     if (!p)
@@ -1064,14 +1002,9 @@ bool plan_a(char *filename)
         fatal("%s is not a normal file--can't patch.\n",filename);
     i_size = filestat.st_size;
     /*NOSTRICT*/
-    if(i_womp != Nullch) {
-        free(i_womp);
-    }
     i_womp = malloc((MEM)(i_size+2));
-    if (i_womp == Nullch) {
-        free(i_womp);
+    if (i_womp == Nullch)
         return FALSE;
-    }
     if ((ifd = open(filename,0)) < 0)
         fatal("Can't open file %s\n",filename);
     /*NOSTRICT*/
@@ -1239,7 +1172,7 @@ void open_patch_file(char *filename){
 bool there_is_another_patch()
 {
     bool no_input_file = (filearg[0] == Nullch);
-
+    
     if (p_base != 0L && p_base >= p_filesize) {
         if (verbose)
             say("done\n");
@@ -1269,21 +1202,14 @@ bool there_is_another_patch()
     }
     skip_to(pch_start());
     if (no_input_file) {
-        //fprintf(stderr,"BUF: %s\n",buf);
         if (filearg[0] == Nullch) {
             ask("File to patch: ");
-            if(buf != Nullch) {
-                filearg[0] = fetchname(buf);
-            }
-            else{
-                fatal("patch file not found\n");
-            }
+            filearg[0] = fetchname(buf);
         }
         else if (verbose) {
             say("Patching file %s...\n",filearg[0]);
         }
     }
-
     return TRUE;
 }
 
@@ -1296,8 +1222,8 @@ int intuit_diff_type()
     bool this_line_is_command = FALSE;
     register int indent;
     register char *s, *t;
-    char *oldname = Nullch;
-    char *newname = Nullch;
+    char *oldname;
+    char *newname;
     bool no_filearg = (filearg[0] == Nullch);
 
     Fseek(pfp,p_base,0);
@@ -1330,35 +1256,27 @@ int intuit_diff_type()
             first_command_line = this_line;
             p_indent = indent;          /* assume this for now */
         }
-        if (strnEQ(s,"*** ",4)) {
-            free(oldname);
+        if (strnEQ(s,"*** ",4))
             oldname = fetchname(s+4);
-        }
         else if (strnEQ(s,"--- ",4)) {
-            free(newname);
             newname = fetchname(s+4);
             if (no_filearg) {
                 if (oldname && newname) {
                     if (strlen(oldname) < strlen(newname)) {
                         free(newname);
-                        newname = Nullch;
-                        free(filearg[0]);
                         filearg[0] = oldname;
                     }
                     else {
                         free(oldname);
-                        oldname = Nullch;
-                        free(filearg[0]);
                         filearg[0] = newname;
                     }
                 }
                 else if (oldname) {
-                    free(filearg[0]);
+                    free(newname);
                     filearg[0] = oldname;
                 }
                 else if (newname) {
                     free(oldname);
-                    free(filearg[0]);
                     filearg[0] = newname;
                 }
             }
@@ -1368,8 +1286,7 @@ int intuit_diff_type()
             }
         }
         else if (strnEQ(s,"Index:",6)) {
-            if (no_filearg) {
-                free(filearg[0]);
+            if (no_filearg)  {
                 filearg[0] = fetchname(s+6);
             }
                                         /* this filearg might get limboed */
@@ -1410,10 +1327,10 @@ int intuit_diff_type()
 char* fetchname(char *at)
 {
     char *s = savestr(at);
-    char *name = Nullch;
+    char *name = NULL;
     register char *t;
     char tmpbuf[200];
-    
+
     for (t=s; isspace(*t); t++) ;
     name = t;
     for (; *t && !isspace(*t); t++)
@@ -1421,11 +1338,9 @@ char* fetchname(char *at)
             if (*t == '/')
                 name = t+1;
     *t = '\0';
-    
     name = savestr(name);
-    free(s);
     Sprintf(tmpbuf,"RCS/%s",name);
-    
+    free(s);
     if (stat(name,&filestat) < 0) {
         Strcat(tmpbuf,RCSSUFFIX);
         if (stat(tmpbuf,&filestat) < 0 && stat(tmpbuf+4,&filestat) < 0) {
@@ -1652,7 +1567,8 @@ bool another_hunk()
     return TRUE;
 }
 
-char * pgets(char *bf,int sz,FILE *fp){
+char * pgets(char *bf,int sz,FILE *fp)
+{
     char *ret = fgets(bf,sz,fp);
     register char *s;
     register int indent = 0;
@@ -1803,7 +1719,6 @@ char* savestr(register char *s)
     }
     while (*t++);
     rv = (char*)malloc((MEM) (t - s+1));
-    //fprintf(stderr,"Hm! %ld ",(t-s+1));
     if (rv == NULL) {
         fatal("patch: out of memory (savestr)\n");
     }
@@ -1818,6 +1733,7 @@ int my_exit(int status){
     Unlink(TMPOUTNAME);
     Unlink(TMPREJNAME);
     Unlink(TMPPATNAME);
+    
     exit(status);
 }
 
@@ -1850,6 +1766,9 @@ void fatal(char *pat, ...){
     va_list ap;
     va_start(ap,pat);
     vsay(pat,ap);
+    if(pfp){
+        fclose(pfp);
+    }
     my_exit(1);
 }
 
@@ -1863,9 +1782,8 @@ void ask(char *pat,  ...){
         r = read(ttyfd, buf, sizeof buf);
         Close(ttyfd);
     }
-    else {
+    else
         r = read(2, buf, sizeof buf);
-    }
     if (r <= 0)
         buf[0] = 0;
 }
