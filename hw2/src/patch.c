@@ -345,6 +345,9 @@ void get_some_switches(){
         }
         switch(c) {
             case '\1':
+                if(strEQ(optarg,"+")){
+                    return;
+                }
                 if (filec == MAXFILEC)
                     fatal("Too many file arguments.\n");
                 //fprintf(stderr," CURRENT THING: %s ! ",Argv[optind]);
