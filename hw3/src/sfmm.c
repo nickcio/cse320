@@ -28,11 +28,14 @@ void findadd(sf_block *p) { //Find where to add a freed block, and add it
 }
 
 void delfl(sf_block *block) { //Removes block from free list
-    if(block->header&THIS_BLOCK_ALLOCATED) return;
+    if((block->header&THIS_BLOCK_ALLOCATED)) return;
+    if((block->body.links.next==(sf_block *)0x1000)) return;
     sf_block *prev = block->body.links.prev;
     sf_block *next = block->body.links.next;
     prev->body.links.next = next;
     next->body.links.prev = prev;
+    block->body.links.next=NULL;
+    block->body.links.prev=NULL;
 }
 
 sf_block *getnextblock(sf_block *b) {//Gets next block in heap after this one
@@ -61,6 +64,7 @@ void refreshpal(sf_block *s) {//s is start of the entire heap. refreshes all pre
     while(ssize) {
         sf_header head = curr->header;
         ssize = (head/8 << 3);
+        //fprintf(stderr,"THISSIZE! %ld",ssize);
         if(head & THIS_BLOCK_ALLOCATED) al = 1;
         else al = 0;
         if(pal) head|=PREV_BLOCK_ALLOCATED;
@@ -96,34 +100,56 @@ sf_block *prevfree(sf_block *s) {//Finds if prev block is free in the heap, retu
     return NULL;
 }
 
+void delfree(sf_block *s) {//Removes header & footer of free block
+    sf_footer *footer = (sf_footer*)getfooter(s);
+    *footer = 0;
+    s->header = 0;
+    s->body.links.next = 0;
+    s->body.links.prev = 0;
+}
+
 void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire heap.
     size_t currsize = (s->header/8 << 3);
     size_t nextsize = nextfree(s);
     sf_block *prevpoint = prevfree(s);
+    //sf_show_heap();
     fprintf(stderr,"FREEING %p, NEXTSIZE: %ld, PREVPOINT: %p\n",s,nextsize,prevpoint);
     if(!nextsize && !prevpoint) return;
-    fprintf(stderr,"Past return!\n");
+    fprintf(stderr,"Past return! %ld %p\n",currsize, s);
     delfl(s);
-    if(nextsize) delfl(getnextblock(s));
+    //fprintf(stderr,"Past return2!\n");
+    if(nextsize) {
+        delfl(getnextblock(s));
+    }
+    //fprintf(stderr,"Past return3!\n");
     if(prevpoint) {
         delfl(prevpoint);
+        delfree(s);
         s = prevpoint;
         nextsize+=currsize;
+        fprintf(stderr,"Inprevpoint!\n");
     }
+    //fprintf(stderr,"Past return4!\n");
     sf_block newblock;
     sf_header newhead = (sf_header)((s->header)+nextsize);
     newblock.header = newhead;
     *s = newblock;
+    fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
     sf_footer *footer = (sf_footer*)getfooter(s);
+    fprintf(stderr,"Past return25!\n");
     *footer = (sf_footer)newhead;
     findadd(s);
+    fprintf(stderr,"Past return5!\n");
+    //sf_show_heap();
 }
 
 void newmem() { //Memgrow + coalescing
     int init = 0;
     if(sf_mem_start() == sf_mem_end()) init = 1; //Whether this is the first page allocated, to know if we have to make prologue
     void *s = sf_mem_grow(); //Allocated page of memory
+    //refreshpal(sf_mem_start());
     if(init) { //Make prologue
+        fprintf(stderr,"INIT!\n");
         sf_block prolog; //Prologue
         prolog.header = (sf_header)(32 | THIS_BLOCK_ALLOCATED); //Header for 32 byte block, alloc flag == 1
         *((sf_block*)s) = prolog;
@@ -144,24 +170,46 @@ void newmem() { //Memgrow + coalescing
         findadd(bigfree); //Add block to free list 9
     }
     else{
-        sf_block bigfree;
-        sf_header bighead = (sf_header)(PAGE_SZ-8);
-        bigfree.header = bighead;
-        *((sf_block*)s) = bigfree;
-        sf_footer *bigfoot = getfooter((sf_block*)s);
-        *bigfoot = (sf_footer)bigfree.header;
-
-        sf_block epilogx = *((sf_block*)(s-8));
-        epilogx.header|=8;
-        findadd((sf_block*)s);
+        sf_block *epilogp = (sf_block *)(s-8);
+        sf_block *previsfree = prevfree(epilogp);
+        fprintf(stderr,"Prev pointer? %p\n",previsfree);
+        if(previsfree) { //If previous block is free, must coalesce it with new page of memory!
+            delfl(previsfree);
+            previsfree->header+=8;
+            sf_footer *lfoot = getfooter(previsfree);
+            *lfoot = (sf_footer)previsfree->header;
+            findadd(previsfree);
+            
+            sf_block *epipoint = (sf_block *)(s);
+            fprintf(stderr,"FOOTER VS NEXT HEADER: %p %p %ld\n",lfoot,epipoint,(long int)epipoint-(long int)lfoot);
+            sf_block bigfree;
+            sf_header bighead = (sf_header)(PAGE_SZ-8);
+            bigfree.header = bighead;
+            *epipoint = bigfree;
+            sf_footer *bigfoot = getfooter(epipoint);
+            *bigfoot = (sf_footer)epipoint->header;
+            findadd(epipoint);
+            //sf_show_heap();
+            coalesce(previsfree);
+        }
+        else { //Else, just make head of new memory the epilogue of last page!
+            sf_block *epipoint = (sf_block *)(s-8);
+            sf_block bigfree;
+            sf_header bighead = (sf_header)(PAGE_SZ);
+            bigfree.header = bighead;
+            *epipoint = bigfree;
+            sf_footer *bigfoot = getfooter(epipoint);
+            *bigfoot = (sf_footer)epipoint->header;
+            findadd(epipoint);
+        }
     }
+    //Make new epilogue.
     sf_block *end = (sf_mem_end()-sizeof(sf_header)); //Where epilogue will be
-    //fprintf(stderr,"end pointer: %p, epilog p: %p, diff: %ld\n",sf_mem_end(),end,((long int)sf_mem_end()-(long int)end));
     sf_block epilog;
     sf_header epih = 0 | THIS_BLOCK_ALLOCATED;
     epilog.header = epih;
     *end=epilog; //Sets epilogue
-
+    sf_show_heap();
 }
 
 void *addql(int index) { //Assumes index is valid
@@ -213,11 +261,13 @@ void *findfree(size_t size, int i) { //Attempts to find a free block of at least
     sf_block *head = &sf_free_list_heads[i];
     sf_block *this = head->body.links.next;
     while(this != head) {
-        if((this->header >> 3) >= size) {
+        fprintf(stderr,"SEEN SIZE %ld in %d!\n",(this->header/8 << 3),i);
+        if((this->header/8 << 3) >= size) {
             return this;
         }
         this = this->body.links.next;
     }
+    fprintf(stderr,"GETS HERE FOR SEARCH OF SIZE %ld, IN LIST %d\n",size,i);
     return NULL;
 }
 
@@ -254,8 +304,15 @@ void *sf_malloc(size_t size) {
     }
 
     void *g = checkfree(fullsize);
+    fprintf(stderr,"FREE POINT FOR %ld? %p\n",fullsize,g);
     if(g != NULL) {
         g = malsplit(g,fullsize);
+    }
+    else{
+        newmem();
+        totalsz+=PAGE_SZ;
+        fprintf(stderr,"CALLING MALLOC AGAIn\n");
+        g = sf_malloc(size);
     }
     refreshpal(sf_mem_start());
     //sf_show_heap();
