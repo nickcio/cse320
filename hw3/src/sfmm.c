@@ -28,6 +28,7 @@ void findadd(sf_block *p) { //Find where to add a freed block, and add it
 }
 
 void delfl(sf_block *block) { //Removes block from free list
+    if(block->header&THIS_BLOCK_ALLOCATED) return;
     sf_block *prev = block->body.links.prev;
     sf_block *next = block->body.links.next;
     prev->body.links.next = next;
@@ -44,6 +45,12 @@ void *getfooter(sf_block *p) {//Assumes block is free
     size_t psize = (p->header/8 << 3);
     void *footer = (void *)(p) + psize - 8;
     return footer;
+}
+
+void *getheader(sf_footer *f) {//Gets header FROM POINTER TO FOOTER!
+    size_t fsize = ((*f)/8 << 3);
+    void *header = (void *)(f) - fsize + 8;
+    return header;
 }
 
 void refreshpal(sf_block *s) {//s is start of the entire heap. refreshes all prev alloc flags.
@@ -68,6 +75,50 @@ void refreshpal(sf_block *s) {//s is start of the entire heap. refreshes all pre
     }
 }
 
+size_t nextfree(sf_block *s) {//Finds if next block is free in heap, if found returns its size
+    sf_block *next = getnextblock(s);
+    size_t nextsize = (next->header/8 << 3);
+    if(!((next->header)&THIS_BLOCK_ALLOCATED)) {
+        fprintf(stderr,"NEXT IS FREE!\n");
+        sf_show_block(next);
+        return nextsize;
+    }
+    return 0;
+}
+
+sf_block *prevfree(sf_block *s) {//Finds if prev block is free in the heap, returns pointer
+    fprintf(stderr,"Got here 1! %ld\n",(s->header&PREV_BLOCK_ALLOCATED));
+    if((s->header&PREV_BLOCK_ALLOCATED) == PREV_BLOCK_ALLOCATED) return NULL;
+    sf_header *head = (sf_header *)getheader((void *)(s)-8);
+    fprintf(stderr,"Got here 3!\n");
+    if((*head&THIS_BLOCK_ALLOCATED) == 0) return (sf_block *)head;
+    fprintf(stderr,"Got here 4!\n");
+    return NULL;
+}
+
+void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire heap.
+    size_t currsize = (s->header/8 << 3);
+    size_t nextsize = nextfree(s);
+    sf_block *prevpoint = prevfree(s);
+    fprintf(stderr,"FREEING %p, NEXTSIZE: %ld, PREVPOINT: %p\n",s,nextsize,prevpoint);
+    if(!nextsize && !prevpoint) return;
+    fprintf(stderr,"Past return!\n");
+    delfl(s);
+    if(nextsize) delfl(getnextblock(s));
+    if(prevpoint) {
+        delfl(prevpoint);
+        s = prevpoint;
+        nextsize+=currsize;
+    }
+    sf_block newblock;
+    sf_header newhead = (sf_header)((s->header)+nextsize);
+    newblock.header = newhead;
+    *s = newblock;
+    sf_footer *footer = (sf_footer*)getfooter(s);
+    *footer = (sf_footer)newhead;
+    findadd(s);
+}
+
 void newmem() { //Memgrow + coalescing
     int init = 0;
     if(sf_mem_start() == sf_mem_end()) init = 1; //Whether this is the first page allocated, to know if we have to make prologue
@@ -90,7 +141,19 @@ void newmem() { //Memgrow + coalescing
             sf_free_list_heads[i] = dummy;
         }
 
-        addfl(bigfree,9); //Add block to free list 9
+        findadd(bigfree); //Add block to free list 9
+    }
+    else{
+        sf_block bigfree;
+        sf_header bighead = (sf_header)(PAGE_SZ-8);
+        bigfree.header = bighead;
+        *((sf_block*)s) = bigfree;
+        sf_footer *bigfoot = getfooter((sf_block*)s);
+        *bigfoot = (sf_footer)bigfree.header;
+
+        sf_block epilogx = *((sf_block*)(s-8));
+        epilogx.header|=8;
+        findadd((sf_block*)s);
     }
     sf_block *end = (sf_mem_end()-sizeof(sf_header)); //Where epilogue will be
     //fprintf(stderr,"end pointer: %p, epilog p: %p, diff: %ld\n",sf_mem_end(),end,((long int)sf_mem_end()-(long int)end));
@@ -98,7 +161,7 @@ void newmem() { //Memgrow + coalescing
     sf_header epih = 0 | THIS_BLOCK_ALLOCATED;
     epilog.header = epih;
     *end=epilog; //Sets epilogue
-    fprintf(stderr,"size of header: %ld, %ld\n",sizeof(sf_header), ((long int)s)%8);
+
 }
 
 void *addql(int index) { //Assumes index is valid
@@ -180,20 +243,16 @@ void *sf_malloc(size_t size) {
         newmem();
         totalsz+=PAGE_SZ;
     }
-    void *start = sf_mem_start(); //Start of mem pages
 
     //Check if it is valid for quick lists
     //void *g = (void *)0;
     if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8) {
-        int qind = (fullsize - MIN_BLOCK_SIZE)/8;
-        fprintf(stderr,"qind: %d\n",qind);
+        //int qind = (fullsize - MIN_BLOCK_SIZE)/8;
+        //fprintf(stderr,"qind: %d\n",qind);
         //g = addql(qind);
-        fprintf(stderr,"after\n");
+        //fprintf(stderr,"after\n");
     }
-    fprintf(stderr,"memstart: %p\n",start);
-    fprintf(stderr,"size: %ld newsize: %ld\n",size,fullsize);
-    fprintf(stderr,"durr: %p, %ld\n",start,totalsz);
-    //fprintf(stderr,"found pointer: %p\n",checkfree(fullsize));
+
     void *g = checkfree(fullsize);
     if(g != NULL) {
         g = malsplit(g,fullsize);
@@ -219,8 +278,8 @@ void sf_free(void *pp) {
     *p = freeb;
     *footer = (sf_footer)(p->header);
     findadd(p);
+    coalesce(p);
     refreshpal(sf_mem_start());
-    fprintf(stderr,"SF_FREE %p\n",pp);
 
 }
 

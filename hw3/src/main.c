@@ -11,7 +11,10 @@ int main(int argc, char const *argv[]) {
     printf("%p %p %p %p %p\n", ptr,ptr2,ptr3,ptr4,ptr5);
 
     sf_free(ptr);
+    sf_free(ptr2);
+    //sf_show_heap();
     sf_free(ptr3);
+    sf_free(ptr5);
 
     sf_show_heap();
 
