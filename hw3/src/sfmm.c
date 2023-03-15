@@ -12,12 +12,32 @@ static size_t totalsz = 0;
 static size_t allocsz = 0;
 static size_t MIN_BLOCK_SIZE = 32;
 
-void addfl(sf_block *block, int i) {
+void addfl(sf_block *block, int i) { //Adds block to free list i
     sf_block *nexter = sf_free_list_heads[i].body.links.next;
     block->body.links.next = nexter;
     block->body.links.prev = &sf_free_list_heads[i];
     nexter->body.links.prev = block;
     sf_free_list_heads[i].body.links.next = block;
+}
+
+void findadd(sf_block *p) { //Find where to add a freed block, and add it
+    size_t psize = (p->header/8 << 3);
+    int i = 0;
+    for(size_t min = MIN_BLOCK_SIZE; min < psize && i < NUM_FREE_LISTS; min*=2) i++; //Find correct list
+    addfl(p,i);
+}
+
+void delfl(sf_block *block) { //Removes block from free list
+    sf_block *prev = block->body.links.prev;
+    sf_block *next = block->body.links.next;
+    prev->body.links.next = next;
+    next->body.links.prev = prev;
+}
+
+void *getfooter(sf_block *p) {//Assumes block is free
+    size_t psize = (p->header/8 << 3);
+    void *footer = (void *)(p) + psize - 8;
+    return footer;
 }
 
 void newmem() { //Memgrow + coalescing
@@ -73,6 +93,57 @@ void *addql(int index) { //Assumes index is valid
     return NULL;
 }
 
+void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, assumes size < size of block pointed to by p
+    size_t psize = (p->header/8 << 3); //size of block pointed to by p
+    delfl(p);
+    if(psize - size < 32) { //Splitting the block will result in splintering, so allocate whole block!
+        sf_block newb;
+        newb.header = (sf_header)((psize) | THIS_BLOCK_ALLOCATED);
+        *p = newb;
+        return p;
+    }
+    size_t qsize = (psize - size) >> 3 << 3;
+    sf_block *newfree = (sf_block *)((void *)p+size);
+    fprintf(stderr,"QSIZE: %ld, SIZE: %ld, P: %p, NEWFREE: %p\n",qsize,size,p,newfree);
+    sf_block freeb;
+    freeb.header = (sf_header)(qsize);
+    *newfree = freeb;
+    sf_footer *freefooter = (sf_footer *)getfooter(newfree);
+    *freefooter = (sf_footer)(qsize);
+    findadd(newfree);
+    
+    sf_block newb;
+    newb.header = (sf_header)((size) | THIS_BLOCK_ALLOCATED);
+    *p = newb;
+    return p;
+}
+
+void *findfree(size_t size, int i) { //Attempts to find a free block of at least size in free list i
+    sf_block *head = &sf_free_list_heads[i];
+    sf_block *this = head->body.links.next;
+    while(this != head) {
+        if((this->header >> 3) >= size) {
+            return this;
+        }
+        this = this->body.links.next;
+    }
+    return NULL;
+}
+
+void *checkfree(size_t size) { //Finds a free block of at least size by checking free lists
+    int i = 0;
+    for(size_t min = MIN_BLOCK_SIZE; min < size && i < NUM_FREE_LISTS; min*=2) { //i will be first list to search
+        i++;
+    }
+    for(i = i; i < NUM_FREE_LISTS; i++) {
+        void *pp = findfree(size,i);
+        if(pp != NULL) {
+            return pp;
+        }
+    }
+    return NULL;
+}
+
 void *sf_malloc(size_t size) {
     if(size == 0) return NULL; //Size 0, return NULL
     size_t fullsize = size%8 == 0 ? size + 8 : (size + 16)+(8-size%8); //Round to multiple of 8, fullsize is size with header
@@ -81,12 +152,9 @@ void *sf_malloc(size_t size) {
         totalsz+=PAGE_SZ;
     }
     void *start = sf_mem_start(); //Start of mem pages
-    //sf_header nh = fullsize/8 << 3; //Header block_size is first 61 bits, so shift fullsize
-    //nh = nh | 0x1; //Alloc bit 1
-    //sf_block newb; //New block
-    //newb.header = nh; //Set header
+
     //Check if it is valid for quick lists
-    void *g = (void *)0;
+    //void *g = (void *)0;
     if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8) {
         int qind = (fullsize - MIN_BLOCK_SIZE)/8;
         fprintf(stderr,"qind: %d\n",qind);
@@ -96,6 +164,11 @@ void *sf_malloc(size_t size) {
     fprintf(stderr,"memstart: %p\n",start);
     fprintf(stderr,"size: %ld newsize: %ld\n",size,fullsize);
     fprintf(stderr,"durr: %p, %ld\n",start,totalsz);
+    //fprintf(stderr,"found pointer: %p\n",checkfree(fullsize));
+    void *g = checkfree(fullsize);
+    if(g != NULL) {
+        malsplit(g,fullsize);
+    }
 
     sf_show_heap();
     return g;
