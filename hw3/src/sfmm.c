@@ -7,9 +7,8 @@
 #include <string.h>
 #include "debug.h"
 #include "sfmm.h"
+#include "helper.h"
 
-static size_t totalsz = 0;
-static size_t allocsz = 0;
 static size_t MIN_BLOCK_SIZE = 32;
 
 void addfl(sf_block *block, int i) { //Adds block to free list i
@@ -82,9 +81,10 @@ void refreshpal(sf_block *s) {//s is start of the entire heap. refreshes all pre
 size_t nextfree(sf_block *s) {//Finds if next block is free in heap, if found returns its size
     sf_block *next = getnextblock(s);
     size_t nextsize = (next->header/8 << 3);
+    if((next->header&IN_QUICK_LIST)) return 0;
     if(!((next->header)&THIS_BLOCK_ALLOCATED)) {
         fprintf(stderr,"NEXT IS FREE!\n");
-        sf_show_block(next);
+        //sf_show_block(next);
         return nextsize;
     }
     return 0;
@@ -117,19 +117,20 @@ void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire he
     if(!nextsize && !prevpoint) return;
     fprintf(stderr,"Past return! %ld %p\n",currsize, s);
     delfl(s);
-    //fprintf(stderr,"Past return2!\n");
+    fprintf(stderr,"Past return2!\n");
     if(nextsize) {
         delfl(getnextblock(s));
     }
-    //fprintf(stderr,"Past return3!\n");
+    fprintf(stderr,"Past return3!\n");
     if(prevpoint) {
+        sf_show_heap();
         delfl(prevpoint);
         delfree(s);
         s = prevpoint;
         nextsize+=currsize;
         fprintf(stderr,"Inprevpoint!\n");
     }
-    //fprintf(stderr,"Past return4!\n");
+    fprintf(stderr,"Past return4!\n");
     sf_block newblock;
     sf_header newhead = (sf_header)((s->header)+nextsize);
     newblock.header = newhead;
@@ -149,11 +150,11 @@ void newmem() { //Memgrow + coalescing
     void *s = sf_mem_grow(); //Allocated page of memory
     //refreshpal(sf_mem_start());
     if(init) { //Make prologue
-        fprintf(stderr,"INIT!\n");
+
         sf_block prolog; //Prologue
         prolog.header = (sf_header)(32 | THIS_BLOCK_ALLOCATED); //Header for 32 byte block, alloc flag == 1
         *((sf_block*)s) = prolog;
-        sf_show_block(s);
+        //sf_show_block(s);
 
         sf_block *bigfree = s+32; //Pointer to first free block
         bigfree->header = (sf_header)((PAGE_SZ-MIN_BLOCK_SIZE-8)); //Sets big sized free block, alloc flag = 0
@@ -172,7 +173,6 @@ void newmem() { //Memgrow + coalescing
     else{
         sf_block *epilogp = (sf_block *)(s-8);
         sf_block *previsfree = prevfree(epilogp);
-        fprintf(stderr,"Prev pointer? %p\n",previsfree);
         if(previsfree) { //If previous block is free, must coalesce it with new page of memory!
             delfl(previsfree);
             previsfree->header+=8;
@@ -181,7 +181,6 @@ void newmem() { //Memgrow + coalescing
             findadd(previsfree);
             
             sf_block *epipoint = (sf_block *)(s);
-            fprintf(stderr,"FOOTER VS NEXT HEADER: %p %p %ld\n",lfoot,epipoint,(long int)epipoint-(long int)lfoot);
             sf_block bigfree;
             sf_header bighead = (sf_header)(PAGE_SZ-8);
             bigfree.header = bighead;
@@ -204,32 +203,60 @@ void newmem() { //Memgrow + coalescing
         }
     }
     //Make new epilogue.
-    sf_block *end = (sf_mem_end()-sizeof(sf_header)); //Where epilogue will be
-    sf_block epilog;
-    sf_header epih = 0 | THIS_BLOCK_ALLOCATED;
-    epilog.header = epih;
-    *end=epilog; //Sets epilogue
-    sf_show_heap();
+    sf_block *end = (sf_block *)(sf_mem_end()-8); //Where epilogue will be
+    end->header = 0 | THIS_BLOCK_ALLOCATED;
+    //sf_show_heap();
 }
 
-void *addql(int index) { //Assumes index is valid
-    fprintf(stderr,"atblock\n");
-    int len = sf_quick_lists[index].length;
-    fprintf(stderr,"len: %d\n",len);
-    if(len == 0) {
-        sf_header nh = (index*8+MIN_BLOCK_SIZE)/8 << 3; //Header block_size is first 61 bits
-        nh = nh | 0x5; //Alloc bit 4 & 1 (qklst and alloc)
-        sf_block newb; //New block
-        newb.header = nh; //Set header
-        sf_quick_lists[index].first = &newb;
-        len++;
-        allocsz+= (index*8+MIN_BLOCK_SIZE);
+void flushql(int i) { //flushes quicklist i
+    sf_block *head = sf_quick_lists[i].first;
+    while(head) {
+        sf_block *curr = head;
+        curr->header-=(curr->header&IN_QUICK_LIST);
+        curr->header-=(curr->header&THIS_BLOCK_ALLOCATED);
+        head = head->body.links.next;
+        findadd(curr);
+        refreshpal(sf_mem_start());
+        coalesce(curr);
     }
-    sf_block *ql = sf_quick_lists[index].first;
-    fprintf(stderr,"this block: %d %ld\n",len,ql->header);
-    sf_show_block(ql);
-    //sf_show_quick_lists();
+    sf_quick_lists[i].first=NULL;
+    sf_quick_lists[i].length = 0;
+}
+
+void *addql(sf_block *b, int index) { //Assumes index is valid
+    int len = sf_quick_lists[index].length;
+    if(len == 0) sf_quick_lists[index].first = NULL;
+    if(len == QUICK_LIST_MAX) {
+        flushql(index);
+    }
+    b->body.links.next = sf_quick_lists[index].first;
+    b->body.links.prev = NULL;
+    sf_quick_lists[index].first = b;
+    b->header|=IN_QUICK_LIST;
+    b->header|=THIS_BLOCK_ALLOCATED;
+    sf_quick_lists[index].length+=1;
+
+    return b;
+}
+
+void *findaddql(sf_block *p) { //Find where to add a block to a quicklist, returns NULL if it can't be added to one
+    size_t psize = (p->header/8 << 3);
+    if(psize >= MIN_BLOCK_SIZE && psize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8) {
+        int i = (psize - MIN_BLOCK_SIZE)/8;
+        return addql(p,i);
+    }
     return NULL;
+}
+
+void *malql(int i) {//Allocates a free block from a quick list i
+    if(i < 0 || i > QUICK_LIST_MAX-1) return NULL;
+    if(sf_quick_lists[i].length < 1) return NULL;
+    sf_block *b = sf_quick_lists[i].first;
+    sf_quick_lists[i].first = b->body.links.next;
+    sf_quick_lists[i].length-=1;
+    b->header-=(b->header&IN_QUICK_LIST);
+    b->header|=THIS_BLOCK_ALLOCATED;
+    return b;
 }
 
 void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, assumes size < size of block pointed to by p
@@ -250,7 +277,8 @@ void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, ass
     sf_footer *freefooter = (sf_footer *)getfooter(newfree);
     *freefooter = (sf_footer)(qsize);
     findadd(newfree);
-    
+    //coalesce(newfree);
+
     sf_block newb;
     newb.header = (sf_header)((size) | THIS_BLOCK_ALLOCATED);
     *p = newb;
@@ -261,13 +289,11 @@ void *findfree(size_t size, int i) { //Attempts to find a free block of at least
     sf_block *head = &sf_free_list_heads[i];
     sf_block *this = head->body.links.next;
     while(this != head) {
-        fprintf(stderr,"SEEN SIZE %ld in %d!\n",(this->header/8 << 3),i);
         if((this->header/8 << 3) >= size) {
             return this;
         }
         this = this->body.links.next;
     }
-    fprintf(stderr,"GETS HERE FOR SEARCH OF SIZE %ld, IN LIST %d\n",size,i);
     return NULL;
 }
 
@@ -291,35 +317,39 @@ void *sf_malloc(size_t size) {
     if(fullsize < 32) fullsize = 32;
     if(sf_mem_start() == sf_mem_end()) { //If total mem pages is 0, mem grow
         newmem();
-        totalsz+=PAGE_SZ;
     }
 
     //Check if it is valid for quick lists
-    //void *g = (void *)0;
-    if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8) {
-        //int qind = (fullsize - MIN_BLOCK_SIZE)/8;
-        //fprintf(stderr,"qind: %d\n",qind);
-        //g = addql(qind);
-        //fprintf(stderr,"after\n");
+    void *g = NULL;
+    if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8 && fullsize%8==0) {
+        g = malql((fullsize-MIN_BLOCK_SIZE)>>3);
     }
-
-    void *g = checkfree(fullsize);
-    fprintf(stderr,"FREE POINT FOR %ld? %p\n",fullsize,g);
-    if(g != NULL) {
+    if(g == NULL) {
+    g = checkfree(fullsize); //Check if a block of fullsize is free
+    }
+    if(g != NULL) { //If there is one
         g = malsplit(g,fullsize);
     }
-    else{
+    else{ //Allocate new page and attempt to malloc again
         newmem();
-        totalsz+=PAGE_SZ;
-        fprintf(stderr,"CALLING MALLOC AGAIn\n");
         g = sf_malloc(size);
     }
-    refreshpal(sf_mem_start());
-    //sf_show_heap();
+
+    refreshpal(sf_mem_start()); //Remove this and the code breaks!
+
+    sf_block *malbloc = (sf_block *)g;
+    *(malbloc->body.payload) = size;
+    //Set next pal bit
+    sf_block *next = getnextblock(g);
+    if(next != sf_mem_end() - 8) next->header|=PREV_BLOCK_ALLOCATED;
+    //Remove ql bit
+    next->header-=(next->header&IN_QUICK_LIST);
+
     return g;
 }
 
 void sf_free(void *pp) {
+    //A bunch of checks for invalid pointers as described by the doc
     if(pp == NULL) abort();
     sf_block *p = (sf_block *)pp;
     sf_header head = p->header;
@@ -327,16 +357,36 @@ void sf_free(void *pp) {
     if((long int)p % 8 || psize % 8 || psize < 32) abort();
     if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
     if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
-    //Also check for if prev alloc is 1 and preceding block alloc is 0
-    sf_block freeb;
-    head-=THIS_BLOCK_ALLOCATED;
-    freeb.header = head;
-    sf_footer *footer = (sf_footer *)getfooter(p);
-    *p = freeb;
-    *footer = (sf_footer)(p->header);
-    findadd(p);
-    coalesce(p);
-    refreshpal(sf_mem_start());
+    //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
+
+    int qvalid = (psize >= MIN_BLOCK_SIZE && psize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8); //Whether this block can be sent to quick list or not
+    //Make the freed block
+    if(!qvalid) { //Sent to free list
+        sf_block freeb;
+        head-=THIS_BLOCK_ALLOCATED;
+        freeb.header = head;
+        sf_footer *footer = (sf_footer *)getfooter(p);
+        *p = freeb;
+        *footer = (sf_footer)(p->header);
+        findadd(p);
+        refreshpal(sf_mem_start()); //Don't remove this one either!
+        coalesce(p);
+    }
+    else { //Sent to quick list
+        sf_block freeb;
+        head-=THIS_BLOCK_ALLOCATED;
+        freeb.header = head|IN_QUICK_LIST;
+        *p = freeb;
+        findaddql(p);
+        refreshpal(sf_mem_start());
+    }
+    //Set next pal bit
+    if(!(p->header&THIS_BLOCK_ALLOCATED)) {
+        sf_block *next = getnextblock(p);
+        if(next != sf_mem_end() - 8) {
+            next->header-=(next->header&PREV_BLOCK_ALLOCATED);
+        }
+    }
 
 }
 
