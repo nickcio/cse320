@@ -3,7 +3,7 @@
 
 int main(int argc, char const *argv[]) {
 
-    /* double* ptr = sf_malloc(sizeof(double)*3);
+    double* ptr = sf_malloc(sizeof(double)*3);
     double* ptrg = sf_malloc(sizeof(double)*3);
     double* ptr2 = sf_malloc(sizeof(double)*5);
     double* ptr3 = sf_malloc(sizeof(double)*6);
@@ -28,20 +28,15 @@ int main(int argc, char const *argv[]) {
 
     sf_show_heap();
 
-    sf_malloc(3480-8);
-    sf_malloc(3440);
+    void *p = sf_memalign(846,64);
+    fprintf(stderr,"pointer mod 64? %p %ld\n",p-8,(long int)p%64);
 
+    void *q = sf_memalign(938,128);
+    fprintf(stderr,"pointer mod 128? %p %ld\n",q-8,(long int)q%128);
+
+    void *r = sf_memalign(50,8);
+    fprintf(stderr,"pointer mod 8? %p %ld\n",r-8,(long int)r%8);
     sf_show_heap();
-
-    sf_malloc(400);
-
-    sf_show_heap(); */
-
-    void *x = sf_malloc(86100);
-    fprintf(stderr,"Done.\n");
-    fprintf(stderr,"Hi %p\n",x);
-    sf_show_heap();
-
-
+    
     return EXIT_SUCCESS;
 }

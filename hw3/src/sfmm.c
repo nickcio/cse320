@@ -16,12 +16,8 @@ void addfl(sf_block *block, int i) { //Adds block to free list i
     sf_block *nexter = sf_free_list_heads[i].body.links.next;
     block->body.links.next = nexter;
     block->body.links.prev = &sf_free_list_heads[i];
-    fprintf(stderr,"POINTERS IN ADDFL: %p %p\n",&sf_free_list_heads[i],nexter);
-    sf_show_heap();
     nexter->body.links.prev = block;
     sf_free_list_heads[i].body.links.next = block;
-    fprintf(stderr,"AFTER\n");
-    //sf_show_heap();
 }
 
 void findadd(sf_block *p) { //Find where to add a freed block, and add it
@@ -146,8 +142,6 @@ void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire he
     fprintf(stderr,"Past return25!\n");
     *footer = (sf_footer)newhead;
     findadd(s);
-    sf_show_heap();
-    fprintf(stderr,"Past return5!\n");
     //sf_show_heap();
 }
 
@@ -268,6 +262,39 @@ void *malql(int i) {//Allocates a free block from a quick list i
     return b;
 }
 
+void *memalsplit(sf_block *f, sf_block *p, size_t sizep) {//f is free block before p, p is specific block to be allocated
+    size_t fullsize = (f->header/8 << 3);
+    delfl(f);
+    size_t sizef = (size_t)p - (size_t)f;
+    size_t sizelast = fullsize - sizef - sizep;
+    if(sizelast < 32) { //Will leave splinter on the right side, so allocate bigger block!
+        sizep+=sizelast;
+        sizelast = 0;
+    }
+    sf_block fblock; //Free block before p
+    fblock.header = (sf_header)(sizef|(f->header&PREV_BLOCK_ALLOCATED));
+    *f = fblock;
+    sf_footer *ffoot = (sf_footer *)getfooter(f);
+    *ffoot = fblock.header;
+    findadd(f);
+
+    sf_block pblock; //Memaligned block
+    pblock.header = (sf_header)(sizep|THIS_BLOCK_ALLOCATED);
+    *p = pblock;
+
+    if(sizelast) { //Free block after p
+        sf_block *l = getnextblock(p);
+        sf_block lblock;
+        lblock.header = (sf_header)(sizelast|PREV_BLOCK_ALLOCATED);
+        *l = lblock;
+        sf_footer *lfoot = (sf_footer *)getfooter(l);
+        *lfoot = lblock.header;
+        findadd(l);
+    }
+
+    return p;
+}
+
 void *realsplit(sf_block *p, size_t size) { //Reallocates part of an allocated block, assumes size < size of block pointed to by p
     size_t psize = (p->header/8 << 3); //size of block pointed to by p
 
@@ -308,10 +335,10 @@ void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, ass
     size_t qsize = (psize - size) >> 3 << 3;
     sf_block *newfree = (sf_block *)((void *)p+size);
     sf_block freeb;
-    freeb.header = (sf_header)(qsize);
+    freeb.header = (sf_header)(qsize | PREV_BLOCK_ALLOCATED);
     *newfree = freeb;
     sf_footer *freefooter = (sf_footer *)getfooter(newfree);
-    *freefooter = (sf_footer)(qsize);
+    *freefooter = (sf_footer)freeb.header;
     findadd(newfree);
     //coalesce(newfree);
 
@@ -357,7 +384,6 @@ void *sf_malloc(size_t size) {
             sf_errno = ENOMEM;
             return NULL;
         }
-        
     }
 
     //Check if it is valid for quick lists
@@ -374,9 +400,7 @@ void *sf_malloc(size_t size) {
     else{ //Allocate new page and attempt to malloc again
         if(sf_errno == ENOMEM) return NULL;
         int mem = newmem();
-        fprintf(stderr,"AFTER NEWMEM?\n");
         if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
-            fprintf(stderr,"DONE\n");
             sf_errno = ENOMEM;
             return NULL;
         }
@@ -479,12 +503,48 @@ void *sf_realloc(void *pp, size_t rsize) {
     }
     void *newb = realsplit(pp-8,fullsize);
     //newb->header|=THIS_BLOCK_ALLOCATED;
-    fprintf(stderr,"SIZE: %ld %ld\n",(((sf_block *)newb)->header/8) << 3,fullsize);
-    sf_show_heap();
+
     return newb+8;
 }
 
 void *sf_memalign(size_t size, size_t align) {
-    // TO BE IMPLEMENTED
-    abort();
+    int aligned = 1; //Check if valid align size
+    for(size_t power = 8; power <= align; power*=2) if(align % power != 0) aligned = 0;
+    if(align < 8 || !aligned) {
+        sf_errno = EINVAL;
+        return NULL;
+    }
+
+    if(sf_mem_start() == sf_mem_end()) { //If total mem pages is 0, mem grow
+        int mem = newmem();
+        if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            sf_errno = ENOMEM;
+            return NULL;
+        }
+    }
+    size_t reqsize = size%8==0 ? size+align+MIN_BLOCK_SIZE+8 : size+align+MIN_BLOCK_SIZE+8+(8-size%8);
+    size_t fullsize = size%8==0 ? size+8 : size+8+(8-size%8);
+    void *g = checkfree(reqsize);
+    if(g != NULL) {
+        if((long int)(g+8)%align == 0) {
+            g = malsplit(g,fullsize);
+        }
+        else{
+            void *p = (long int)(g+MIN_BLOCK_SIZE+8)%align == 0 ? (g+MIN_BLOCK_SIZE) : (void *)((g+MIN_BLOCK_SIZE) + (align - ((long int)g+MIN_BLOCK_SIZE+8)%align));
+            g = memalsplit(g,p,fullsize);
+        }
+    }
+    else{ //Allocate new page and attempt to memalign again
+        if(sf_errno == ENOMEM) return NULL;
+        int mem = newmem();
+        if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            sf_errno = ENOMEM;
+            return NULL;
+        }
+        g = sf_memalign(size,align);
+        if(g) g-=8;
+        else return NULL;
+    }
+
+    return g+8;
 }
