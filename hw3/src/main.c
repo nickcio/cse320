@@ -36,6 +36,14 @@ int main(int argc, char const *argv[]) {
 
     void *r = sf_memalign(50,8);
     fprintf(stderr,"pointer mod 8? %p %ld\n",r-8,(long int)r%8);
+
+    void *s = sf_memalign(4000,64);
+    fprintf(stderr,"pointer mod 64? %p %ld\n",s-8,(long int)s%64);
+
+    void *t = sf_memalign(700,32);
+    fprintf(stderr,"pointer mod 32? %p %ld\n",t-8,(long int)t%32);
+    sf_show_heap();
+    sf_free(q);
     sf_show_heap();
     
     return EXIT_SUCCESS;

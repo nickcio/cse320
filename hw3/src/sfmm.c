@@ -64,7 +64,7 @@ void refreshpal(sf_block *s) {//s is start of the entire heap. refreshes all pre
     while(ssize) {
         sf_header head = curr->header;
         ssize = (head/8 << 3);
-        //fprintf(stderr,"THISSIZE! %ld",ssize);
+
         if(head & THIS_BLOCK_ALLOCATED) al = 1;
         else al = 0;
         if(pal) head|=PREV_BLOCK_ALLOCATED;
@@ -84,20 +84,15 @@ size_t nextfree(sf_block *s) {//Finds if next block is free in heap, if found re
     size_t nextsize = (next->header/8 << 3);
     if((next->header&IN_QUICK_LIST)) return 0;
     if(!((next->header)&THIS_BLOCK_ALLOCATED)) {
-        fprintf(stderr,"NEXT IS FREE!\n");
-        //sf_show_block(next);
         return nextsize;
     }
     return 0;
 }
 
 sf_block *prevfree(sf_block *s) {//Finds if prev block is free in the heap, returns pointer
-    fprintf(stderr,"Got here 1! %ld\n",(s->header&PREV_BLOCK_ALLOCATED));
     if((s->header&PREV_BLOCK_ALLOCATED) == PREV_BLOCK_ALLOCATED) return NULL;
     sf_header *head = (sf_header *)getheader((void *)(s)-8);
-    fprintf(stderr,"Got here 3!\n");
     if((*head&THIS_BLOCK_ALLOCATED) == 0) return (sf_block *)head;
-    fprintf(stderr,"Got here 4!\n");
     return NULL;
 }
 
@@ -113,36 +108,27 @@ void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire he
     size_t currsize = (s->header/8 << 3);
     size_t nextsize = nextfree(s);
     sf_block *prevpoint = prevfree(s);
-    //sf_show_heap();
-    //fprintf(stderr,"FREEING %p, NEXTSIZE: %ld, PREVPOINT: %p\n",s,nextsize,prevpoint);
     if(!nextsize && !prevpoint) return;
-    //fprintf(stderr,"Past return! %ld %p\n",currsize, s);
     delfl(s);
-    //fprintf(stderr,"Past return2!\n");
     if(nextsize) {
         delfl(getnextblock(s));
     }
-    fprintf(stderr,"Past return3!\n");
     if(prevpoint) {
-        fprintf(stderr,"Past return4! %p\n",prevpoint);
         delfl(prevpoint);
-        fprintf(stderr,"Past return4!\n");
         delfree(s);
-        fprintf(stderr,"Past return4!\n");
         s = prevpoint;
         nextsize+=currsize;
     }
-    fprintf(stderr,"Past return4!\n");
+
     sf_block newblock;
     sf_header newhead = (sf_header)((s->header)+nextsize);
     newblock.header = newhead;
     *s = newblock;
-    fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
     sf_footer *footer = (sf_footer*)getfooter(s);
-    fprintf(stderr,"Past return25!\n");
+
     *footer = (sf_footer)newhead;
     findadd(s);
-    //sf_show_heap();
+
 }
 
 int newmem() { //Memgrow + coalescing
@@ -150,7 +136,6 @@ int newmem() { //Memgrow + coalescing
     if(sf_mem_start() == sf_mem_end()) init = 1; //Whether this is the first page allocated, to know if we have to make prologue
     void *s = sf_mem_grow(); //Allocated page of memory
     if(s == NULL) return 0;
-    //refreshpal(sf_mem_start());
     if(init) { //Make prologue
 
         sf_block prolog; //Prologue
@@ -410,9 +395,6 @@ void *sf_malloc(size_t size) {
     }
 
     refreshpal(sf_mem_start()); //Remove this and the code breaks!
-
-    sf_block *malbloc = (sf_block *)g;
-    *(malbloc->body.payload) = size;
     //Set next pal bit
     sf_block *next = getnextblock(g);
     if(next != sf_mem_end() - 8) next->header|=PREV_BLOCK_ALLOCATED;
@@ -503,11 +485,12 @@ void *sf_realloc(void *pp, size_t rsize) {
     }
     void *newb = realsplit(pp-8,fullsize);
     //newb->header|=THIS_BLOCK_ALLOCATED;
-
+    refreshpal(sf_mem_start());
     return newb+8;
 }
 
 void *sf_memalign(size_t size, size_t align) {
+    if(size == 0) return NULL;
     int aligned = 1; //Check if valid align size
     for(size_t power = 8; power <= align; power*=2) if(align % power != 0) aligned = 0;
     if(align < 8 || !aligned) {
@@ -533,6 +516,7 @@ void *sf_memalign(size_t size, size_t align) {
             void *p = (long int)(g+MIN_BLOCK_SIZE+8)%align == 0 ? (g+MIN_BLOCK_SIZE) : (void *)((g+MIN_BLOCK_SIZE) + (align - ((long int)g+MIN_BLOCK_SIZE+8)%align));
             g = memalsplit(g,p,fullsize);
         }
+        refreshpal(sf_mem_start());
     }
     else{ //Allocate new page and attempt to memalign again
         if(sf_errno == ENOMEM) return NULL;
@@ -545,6 +529,6 @@ void *sf_memalign(size_t size, size_t align) {
         if(g) g-=8;
         else return NULL;
     }
-
+    
     return g+8;
 }
