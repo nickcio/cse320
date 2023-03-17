@@ -113,41 +113,41 @@ void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire he
     size_t nextsize = nextfree(s);
     sf_block *prevpoint = prevfree(s);
     //sf_show_heap();
-    fprintf(stderr,"FREEING %p, NEXTSIZE: %ld, PREVPOINT: %p\n",s,nextsize,prevpoint);
+    //fprintf(stderr,"FREEING %p, NEXTSIZE: %ld, PREVPOINT: %p\n",s,nextsize,prevpoint);
     if(!nextsize && !prevpoint) return;
-    fprintf(stderr,"Past return! %ld %p\n",currsize, s);
+    //fprintf(stderr,"Past return! %ld %p\n",currsize, s);
     delfl(s);
-    fprintf(stderr,"Past return2!\n");
+    //fprintf(stderr,"Past return2!\n");
     if(nextsize) {
         delfl(getnextblock(s));
     }
-    fprintf(stderr,"Past return3!\n");
+    //fprintf(stderr,"Past return3!\n");
     if(prevpoint) {
-        sf_show_heap();
+        //sf_show_heap();
         delfl(prevpoint);
         delfree(s);
         s = prevpoint;
         nextsize+=currsize;
-        fprintf(stderr,"Inprevpoint!\n");
     }
-    fprintf(stderr,"Past return4!\n");
+    //fprintf(stderr,"Past return4!\n");
     sf_block newblock;
     sf_header newhead = (sf_header)((s->header)+nextsize);
     newblock.header = newhead;
     *s = newblock;
-    fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
+    //fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
     sf_footer *footer = (sf_footer*)getfooter(s);
-    fprintf(stderr,"Past return25!\n");
+    //fprintf(stderr,"Past return25!\n");
     *footer = (sf_footer)newhead;
     findadd(s);
-    fprintf(stderr,"Past return5!\n");
+    //fprintf(stderr,"Past return5!\n");
     //sf_show_heap();
 }
 
-void newmem() { //Memgrow + coalescing
+int newmem() { //Memgrow + coalescing
     int init = 0;
     if(sf_mem_start() == sf_mem_end()) init = 1; //Whether this is the first page allocated, to know if we have to make prologue
     void *s = sf_mem_grow(); //Allocated page of memory
+    if(s == NULL) return 0;
     //refreshpal(sf_mem_start());
     if(init) { //Make prologue
 
@@ -206,6 +206,7 @@ void newmem() { //Memgrow + coalescing
     sf_block *end = (sf_block *)(sf_mem_end()-8); //Where epilogue will be
     end->header = 0 | THIS_BLOCK_ALLOCATED;
     //sf_show_heap();
+    return 1;
 }
 
 void flushql(int i) { //flushes quicklist i
@@ -257,6 +258,33 @@ void *malql(int i) {//Allocates a free block from a quick list i
     b->header-=(b->header&IN_QUICK_LIST);
     b->header|=THIS_BLOCK_ALLOCATED;
     return b;
+}
+
+void *realsplit(sf_block *p, size_t size) { //Reallocates part of an allocated block, assumes size < size of block pointed to by p
+    size_t psize = (p->header/8 << 3); //size of block pointed to by p
+
+    if(psize - size < 32) { //Splitting the block will result in splintering, so just leave the splinter
+        return p;
+    }
+    sf_block *next = getnextblock(p);
+    size_t qsize = (psize - size) >> 3 << 3;
+    sf_block *newfree = (sf_block *)((void *)p+size);
+    sf_block freeb;
+    freeb.header = (sf_header)(qsize | PREV_BLOCK_ALLOCATED);
+    *newfree = freeb;
+    sf_footer *freefooter = (sf_footer *)getfooter(newfree);
+    *freefooter = freeb.header;
+    findadd(newfree);
+    next->header-=(next->header&PREV_BLOCK_ALLOCATED);
+    if(!(next->header&THIS_BLOCK_ALLOCATED)) {
+        sf_footer *nextfooter = (sf_footer *)getfooter(next);
+        *nextfooter = next->header;
+        coalesce(next);
+    }
+    //coalesce(newfree);
+
+    p->header = (sf_header)((size) | THIS_BLOCK_ALLOCATED | (p->header&PREV_BLOCK_ALLOCATED));
+    return p;
 }
 
 void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, assumes size < size of block pointed to by p
@@ -316,7 +344,10 @@ void *sf_malloc(size_t size) {
     size_t fullsize = size%8 == 0 ? size + 8 : (size + 8)+(8-size%8); //Round to multiple of 8, fullsize is size with header
     if(fullsize < 32) fullsize = 32;
     if(sf_mem_start() == sf_mem_end()) { //If total mem pages is 0, mem grow
-        newmem();
+        int mem = newmem();
+        if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            return NULL;
+        }
     }
 
     //Check if it is valid for quick lists
@@ -331,8 +362,11 @@ void *sf_malloc(size_t size) {
         g = malsplit(g,fullsize);
     }
     else{ //Allocate new page and attempt to malloc again
-        newmem();
-        g = sf_malloc(size);
+        int mem = newmem();
+        if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            return NULL;
+        }
+        g = sf_malloc(size)-8;
     }
 
     refreshpal(sf_mem_start()); //Remove this and the code breaks!
@@ -345,12 +379,13 @@ void *sf_malloc(size_t size) {
     //Remove ql bit
     next->header-=(next->header&IN_QUICK_LIST);
 
-    return g;
+    return g+8;
 }
 
 void sf_free(void *pp) {
     //A bunch of checks for invalid pointers as described by the doc
     if(pp == NULL) abort();
+    pp-=8;
     sf_block *p = (sf_block *)pp;
     sf_header head = p->header;
     size_t psize = (head/8 << 3); //size of block pointed to by pp
@@ -391,8 +426,34 @@ void sf_free(void *pp) {
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
-    // TO BE IMPLEMENTED
-    abort();
+    if(rsize == 0) return NULL;
+    size_t fullsize = rsize%8 == 0 ? rsize + 8 : (rsize + 8)+(8-rsize%8);
+    if(fullsize < 32) fullsize = 32;
+     //A bunch of checks for invalid pointers as described by the doc
+    if(pp == NULL) abort();
+    pp-=8;
+    sf_block *p = (sf_block *)pp;
+    sf_header head = p->header;
+    size_t psize = (head/8 << 3); //size of block pointed to by pp
+    if((long int)p % 8 || psize % 8 || psize < 32) abort();
+    if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
+    if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
+    //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
+    pp+=8;
+    if(rsize > psize) {
+        sf_block *newb = sf_malloc(rsize);
+        if(newb != NULL) {
+            memcpy(newb,pp,psize);
+            sf_free(pp);
+            return newb;
+        }
+        return NULL;
+    }
+    void *newb = realsplit(pp-8,fullsize);
+    //newb->header|=THIS_BLOCK_ALLOCATED;
+    fprintf(stderr,"SIZE: %ld %ld\n",(((sf_block *)newb)->header/8) << 3,fullsize);
+    sf_show_heap();
+    return newb+8;
 }
 
 void *sf_memalign(size_t size, size_t align) {
