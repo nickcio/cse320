@@ -37,24 +37,11 @@ int main(int argc, char const *argv[]) {
 
     sf_show_heap(); */
 
-    double* ptr0 = sf_malloc(sizeof(double)*4);
-    double* ptr1 = sf_malloc(sizeof(double)*4);
-    double* ptr2 = sf_malloc(sizeof(double)*4);
-    double* ptr3 = sf_malloc(sizeof(double)*4);
-    double* ptr4 = sf_malloc(sizeof(double)*4);
-    double* ptr5 = sf_malloc(sizeof(double)*4);
-
-    sf_free(ptr0);
-    sf_free(ptr1);
-    sf_free(ptr2);
-    sf_free(ptr3);
-    sf_free(ptr4);
-
+    void *x = sf_malloc(86100);
+    fprintf(stderr,"Done.\n");
+    fprintf(stderr,"Hi %p\n",x);
     sf_show_heap();
 
-    sf_free(ptr5);
-
-    sf_show_heap();
 
     return EXIT_SUCCESS;
 }

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "debug.h"
 #include "sfmm.h"
 #include "helper.h"
@@ -15,14 +16,18 @@ void addfl(sf_block *block, int i) { //Adds block to free list i
     sf_block *nexter = sf_free_list_heads[i].body.links.next;
     block->body.links.next = nexter;
     block->body.links.prev = &sf_free_list_heads[i];
+    fprintf(stderr,"POINTERS IN ADDFL: %p %p\n",&sf_free_list_heads[i],nexter);
+    sf_show_heap();
     nexter->body.links.prev = block;
     sf_free_list_heads[i].body.links.next = block;
+    fprintf(stderr,"AFTER\n");
+    //sf_show_heap();
 }
 
 void findadd(sf_block *p) { //Find where to add a freed block, and add it
     size_t psize = (p->header/8 << 3);
     int i = 0;
-    for(size_t min = MIN_BLOCK_SIZE; min < psize && i < NUM_FREE_LISTS; min*=2) i++; //Find correct list
+    for(size_t min = MIN_BLOCK_SIZE; min < psize && i < NUM_FREE_LISTS-1; min*=2) i++; //Find correct list
     addfl(p,i);
 }
 
@@ -121,25 +126,28 @@ void coalesce(sf_block *s) {//s is start of the entire heap. coalesces entire he
     if(nextsize) {
         delfl(getnextblock(s));
     }
-    //fprintf(stderr,"Past return3!\n");
+    fprintf(stderr,"Past return3!\n");
     if(prevpoint) {
-        //sf_show_heap();
+        fprintf(stderr,"Past return4! %p\n",prevpoint);
         delfl(prevpoint);
+        fprintf(stderr,"Past return4!\n");
         delfree(s);
+        fprintf(stderr,"Past return4!\n");
         s = prevpoint;
         nextsize+=currsize;
     }
-    //fprintf(stderr,"Past return4!\n");
+    fprintf(stderr,"Past return4!\n");
     sf_block newblock;
     sf_header newhead = (sf_header)((s->header)+nextsize);
     newblock.header = newhead;
     *s = newblock;
-    //fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
+    fprintf(stderr,"Past return44 %ld %ld %ld!\n",s->header,nextsize,newhead);
     sf_footer *footer = (sf_footer*)getfooter(s);
-    //fprintf(stderr,"Past return25!\n");
+    fprintf(stderr,"Past return25!\n");
     *footer = (sf_footer)newhead;
     findadd(s);
-    //fprintf(stderr,"Past return5!\n");
+    sf_show_heap();
+    fprintf(stderr,"Past return5!\n");
     //sf_show_heap();
 }
 
@@ -157,7 +165,7 @@ int newmem() { //Memgrow + coalescing
         //sf_show_block(s);
 
         sf_block *bigfree = s+32; //Pointer to first free block
-        bigfree->header = (sf_header)((PAGE_SZ-MIN_BLOCK_SIZE-8)); //Sets big sized free block, alloc flag = 0
+        bigfree->header = (sf_header)((PAGE_SZ-MIN_BLOCK_SIZE-8) | PREV_BLOCK_ALLOCATED); //Sets big sized free block, alloc flag = 0
         sf_footer *bigfoot = s+32+(PAGE_SZ-MIN_BLOCK_SIZE-16);
         *bigfoot = (sf_footer)(bigfree->header);
 
@@ -346,8 +354,10 @@ void *sf_malloc(size_t size) {
     if(sf_mem_start() == sf_mem_end()) { //If total mem pages is 0, mem grow
         int mem = newmem();
         if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            sf_errno = ENOMEM;
             return NULL;
         }
+        
     }
 
     //Check if it is valid for quick lists
@@ -356,17 +366,23 @@ void *sf_malloc(size_t size) {
         g = malql((fullsize-MIN_BLOCK_SIZE)>>3);
     }
     if(g == NULL) {
-    g = checkfree(fullsize); //Check if a block of fullsize is free
+        g = checkfree(fullsize); //Check if a block of fullsize is free
     }
     if(g != NULL) { //If there is one
         g = malsplit(g,fullsize);
     }
     else{ //Allocate new page and attempt to malloc again
+        if(sf_errno == ENOMEM) return NULL;
         int mem = newmem();
+        fprintf(stderr,"AFTER NEWMEM?\n");
         if(!mem) { //NO MEMORY HAS BEEN ALLOCATED
+            fprintf(stderr,"DONE\n");
+            sf_errno = ENOMEM;
             return NULL;
         }
-        g = sf_malloc(size)-8;
+        g = sf_malloc(size);
+        if(g) g-=8;
+        else return NULL;
     }
 
     refreshpal(sf_mem_start()); //Remove this and the code breaks!
@@ -430,14 +446,26 @@ void *sf_realloc(void *pp, size_t rsize) {
     size_t fullsize = rsize%8 == 0 ? rsize + 8 : (rsize + 8)+(8-rsize%8);
     if(fullsize < 32) fullsize = 32;
      //A bunch of checks for invalid pointers as described by the doc
-    if(pp == NULL) abort();
+    if(pp == NULL) {
+        sf_errno = EINVAL;
+        return NULL;
+    }
     pp-=8;
     sf_block *p = (sf_block *)pp;
     sf_header head = p->header;
     size_t psize = (head/8 << 3); //size of block pointed to by pp
-    if((long int)p % 8 || psize % 8 || psize < 32) abort();
-    if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
-    if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
+    if((long int)p % 8 || psize % 8 || psize < 32) {
+        sf_errno = EINVAL;
+        return NULL;
+    }
+    if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) {
+        sf_errno = EINVAL;
+        return NULL;
+    }
+    if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) {
+        sf_errno = EINVAL;
+        return NULL;
+    }
     //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
     pp+=8;
     if(rsize > psize) {
