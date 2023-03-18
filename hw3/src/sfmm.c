@@ -495,7 +495,7 @@ void *sf_realloc(void *pp, size_t rsize) {
     if(rsize > psize) {
         sf_block *newb = sf_malloc(rsize);
         if(newb != NULL) {
-            memcpy(newb,pp,psize);
+            memcpy(newb,pp,psize-8);
             sf_free(pp);
             return newb;
         }
