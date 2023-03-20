@@ -399,7 +399,7 @@ void *sf_malloc(size_t size) {
         else return NULL;
     }
 
-    refreshpal(sf_mem_start()); //Remove this and the code breaks!
+    //refreshpal(sf_mem_start()); //Remove this and the code breaks!
     //Set next pal bit
     sf_block *next = getnextblock(g);
     if(next != sf_mem_end() - 8) next->header|=PREV_BLOCK_ALLOCATED;
@@ -416,7 +416,7 @@ void sf_free(void *pp) {
     sf_block *p = (sf_block *)pp;
     sf_header head = p->header;
     size_t psize = (head/8 << 3); //size of block pointed to by pp
-    if((long int)p % 8 || psize % 8 || psize < 32) abort();
+    if((long unsigned int)p % 8 || psize % 8 || psize < 32) abort();
     if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
     if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
     //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
@@ -467,7 +467,7 @@ void *sf_realloc(void *pp, size_t rsize) {
     sf_block *p = (sf_block *)pp;
     sf_header head = p->header;
     size_t psize = (head/8 << 3); //size of block pointed to by pp
-    if((long int)p % 8 || psize % 8 || psize < 32) {
+    if((long unsigned int)p % 8 || psize % 8 || psize < 32) {
         sf_errno = EINVAL;
         return NULL;
     }
@@ -519,13 +519,19 @@ void *sf_memalign(size_t size, size_t align) {
     }
     size_t reqsize = size%8==0 ? size+align+MIN_BLOCK_SIZE+8 : size+align+MIN_BLOCK_SIZE+8+(8-size%8);
     size_t fullsize = size%8==0 ? size+8 : size+8+(8-size%8);
-    void *g = checkfree(reqsize);
+    void *g = NULL;
+    if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8 && fullsize%8==0) {
+        g = malql((fullsize-MIN_BLOCK_SIZE)>>3);
+    }
+    if(g == NULL) {
+        g = checkfree(reqsize);
+    }
     if(g != NULL) {
-        if((long int)(g+8)%align == 0) {
+        if((long unsigned int)(g+8)%align == 0) {
             g = malsplit(g,fullsize);
         }
         else{
-            void *p = (long int)(g+MIN_BLOCK_SIZE+8)%align == 0 ? (g+MIN_BLOCK_SIZE) : (void *)((g+MIN_BLOCK_SIZE) + (align - ((long int)g+MIN_BLOCK_SIZE+8)%align));
+            void *p = (long unsigned int)(g+MIN_BLOCK_SIZE+8)%align == 0 ? (g+MIN_BLOCK_SIZE) : (void *)((g+MIN_BLOCK_SIZE) + (align - ((long int)g+MIN_BLOCK_SIZE+8)%align));
             g = memalsplit(g,p,fullsize);
         }
         refreshpal(sf_mem_start());
