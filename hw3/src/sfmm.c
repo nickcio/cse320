@@ -56,14 +56,8 @@ void *getheader(sf_footer *f) {//Gets header FROM POINTER TO FOOTER!
     return header;
 }
 
-sf_block *getprev(sf_block *s) {//Gets block before s
-    sf_block *curr = sf_mem_start()+32;
-    sf_block *prev = sf_mem_start();
-    while(curr <= (sf_block *)(sf_mem_end()-8) && curr <= s) {
-        if(curr == s) return prev;
-        prev = curr;
-        curr = getnextblock(curr);
-    }
+sf_footer *getprev(sf_block *s) {//Gets footer before s
+    if((void *)s > sf_mem_start()+8) return (sf_footer *)((void *)s - 8);
     return NULL;
 }
 
@@ -426,8 +420,8 @@ void sf_free(void *pp) {
     if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
     if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
     //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
-    sf_block *prev = getprev(p);
-    if(prev != NULL) if((p->header&PREV_BLOCK_ALLOCATED)&&!(getprev(p)->header&THIS_BLOCK_ALLOCATED)) abort();
+    sf_footer *prev = getprev(p);
+    if(prev != NULL) if(!(p->header&PREV_BLOCK_ALLOCATED)&&(*prev&THIS_BLOCK_ALLOCATED)) abort();
 
     int qvalid = (psize >= MIN_BLOCK_SIZE && psize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8); //Whether this block can be sent to quick list or not
     //Make the freed block
@@ -485,8 +479,8 @@ void *sf_realloc(void *pp, size_t rsize) {
         sf_errno = EINVAL;
         return NULL;
     }
-    sf_block *prev = getprev(p);
-    if(prev != NULL) if((p->header&PREV_BLOCK_ALLOCATED)&&!(getprev(p)->header&THIS_BLOCK_ALLOCATED)) {
+    sf_footer *prev = getprev(p);
+    if(prev != NULL) if(!(p->header&PREV_BLOCK_ALLOCATED)&&(*prev&THIS_BLOCK_ALLOCATED)) {
         sf_errno = EINVAL;
         return NULL;
     }
