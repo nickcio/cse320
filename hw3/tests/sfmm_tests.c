@@ -255,7 +255,7 @@ Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 
 	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)x%align_x == 0, "Payload alignment not what was expected!");
+	cr_assert((long unsigned int)x%align_x == 0, "Payload alignment not what was expected!");
 
 	size_t sz_y = 640;
 	size_t align_y = 27;
@@ -276,7 +276,7 @@ Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT) {
 
 	cr_assert_not_null(x, "x is NULL!");
 	cr_assert_not_null(y, "y is NULL!");
-
+	sf_show_heap();
 	sf_block *bp = (sf_block *)((char *)y - sizeof(sf_header));
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert(x != y, "Pointers are the same!");
@@ -361,25 +361,25 @@ Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
 	void *p = sf_memalign(846,64);
 	sf_block *bp1 = (sf_block *)((char *)p - sizeof(sf_header));
 	cr_assert(bp1->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)p%64 == 0, "Block p Payload alignment not what was expected!");
+	cr_assert((long unsigned int)p%64 == 0, "Block p Payload alignment not what was expected!");
 
     void *q = sf_memalign(938,128);
     sf_block *bp2 = (sf_block *)((char *)q - sizeof(sf_header));
 	cr_assert(bp2->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)q%128 == 0, "Block q Payload alignment not what was expected!");
+	cr_assert((long unsigned int)q%128 == 0, "Block q Payload alignment not what was expected!");
 
     void *r = sf_memalign(50,8);
     sf_block *bp3 = (sf_block *)((char *)r - sizeof(sf_header));
 	cr_assert(bp3->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)r%8 == 0, "Block r Payload alignment not what was expected!");
+	cr_assert((long unsigned int)r%8 == 0, "Block r Payload alignment not what was expected!");
 
     void *s = sf_memalign(4000,16);
     sf_block *bp4 = (sf_block *)((char *)s - sizeof(sf_header));
 	cr_assert(bp4->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)s%16 == 0, "Block s Payload alignment not what was expected!");
+	cr_assert((long unsigned int)s%16 == 0, "Block s Payload alignment not what was expected!");
 
     void *t = sf_memalign(700,32);
     sf_block *bp5 = (sf_block *)((char *)t - sizeof(sf_header));
 	cr_assert(bp5->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long int)t%32 == 0, "Block t Payload alignment not what was expected!");
+	cr_assert((long unsigned int)t%32 == 0, "Block t Payload alignment not what was expected!");
 }
