@@ -276,7 +276,7 @@ Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT) {
 
 	cr_assert_not_null(x, "x is NULL!");
 	cr_assert_not_null(y, "y is NULL!");
-	sf_show_heap();
+
 	sf_block *bp = (sf_block *)((char *)y - sizeof(sf_header));
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert(x != y, "Pointers are the same!");

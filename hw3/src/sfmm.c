@@ -197,7 +197,6 @@ int newmem() { //Memgrow + coalescing
     //Make new epilogue.
     sf_block *end = (sf_block *)(sf_mem_end()-8); //Where epilogue will be
     end->header = 0 | THIS_BLOCK_ALLOCATED;
-    //sf_show_heap();
     return 1;
 }
 
@@ -241,8 +240,23 @@ void *findaddql(sf_block *p) { //Find where to add a block to a quicklist, retur
     return NULL;
 }
 
+void *memalql(size_t reqsize) {//Retrieves a free block from quick lists for memalign, makes it fit for the function
+    int i = (reqsize-32)/8;
+    if(i < 0 || i > NUM_QUICK_LISTS-1) return NULL;
+    if(sf_quick_lists[i].length < 1) return NULL;
+    sf_block *b = sf_quick_lists[i].first;
+    sf_quick_lists[i].first = b->body.links.next;
+    sf_quick_lists[i].length-=1;
+    b->header&=~IN_QUICK_LIST;
+    b->header&=~THIS_BLOCK_ALLOCATED;
+    findadd(b);
+    sf_block *next = getnextblock(b);
+    if(next != NULL) next->header&=~PREV_BLOCK_ALLOCATED;
+    return b;
+}
+
 void *malql(int i) {//Allocates a free block from a quick list i
-    if(i < 0 || i > QUICK_LIST_MAX-1) return NULL;
+    if(i < 0 || i > NUM_QUICK_LISTS-1) return NULL;
     if(sf_quick_lists[i].length < 1) return NULL;
     sf_block *b = sf_quick_lists[i].first;
     sf_quick_lists[i].first = b->body.links.next;
@@ -306,7 +320,6 @@ void *realsplit(sf_block *p, size_t size) { //Reallocates part of an allocated b
         *nextfooter = next->header;
         coalesce(next);
     }
-    //coalesce(newfree);
 
     p->header = (sf_header)((size) | THIS_BLOCK_ALLOCATED | (p->header&PREV_BLOCK_ALLOCATED));
     return p;
@@ -330,7 +343,6 @@ void *malsplit(sf_block *p, size_t size) { //Allocates part of a free block, ass
     sf_footer *freefooter = (sf_footer *)getfooter(newfree);
     *freefooter = (sf_footer)freeb.header;
     findadd(newfree);
-    //coalesce(newfree);
 
     sf_block newb;
     newb.header = (sf_header)((size) | THIS_BLOCK_ALLOCATED);
@@ -496,7 +508,7 @@ void *sf_realloc(void *pp, size_t rsize) {
         return NULL;
     }
     void *newb = realsplit(pp-8,fullsize);
-    //newb->header|=THIS_BLOCK_ALLOCATED;
+
     refreshpal(sf_mem_start());
     return newb+8;
 }
@@ -520,8 +532,8 @@ void *sf_memalign(size_t size, size_t align) {
     size_t reqsize = size%8==0 ? size+align+MIN_BLOCK_SIZE+8 : size+align+MIN_BLOCK_SIZE+8+(8-size%8);
     size_t fullsize = size%8==0 ? size+8 : size+8+(8-size%8);
     void *g = NULL;
-    if(fullsize >= MIN_BLOCK_SIZE && fullsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8 && fullsize%8==0) {
-        g = malql((fullsize-MIN_BLOCK_SIZE)>>3);
+    if(reqsize >= MIN_BLOCK_SIZE && reqsize <= MIN_BLOCK_SIZE+(NUM_QUICK_LISTS-1)*8 && reqsize%8==0) {
+        g = memalql(reqsize);
     }
     if(g == NULL) {
         g = checkfree(reqsize);
