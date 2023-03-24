@@ -429,7 +429,7 @@ void sf_free(void *pp) {
     size_t psize = (head/8 << 3); //size of block pointed to by pp
     if((long unsigned int)p % 8 || psize % 8 || psize < 32) abort();
     if(!(head&THIS_BLOCK_ALLOCATED)||(head&IN_QUICK_LIST)) abort();
-    if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) abort();
+    if(pp < sf_mem_start()+32 || pp >= sf_mem_end()-8 || getfooter(p) >= sf_mem_end()-8) abort();
     //TODO: Also check for if prev alloc is 1 and preceding block alloc is 0
     sf_footer *prev = getprev(p);
     if(prev != NULL) if(!(p->header&PREV_BLOCK_ALLOCATED)&&(*prev&THIS_BLOCK_ALLOCATED)) abort();
@@ -485,7 +485,7 @@ void *sf_realloc(void *pp, size_t rsize) {
         sf_errno = EINVAL;
         return NULL;
     }
-    if(pp < sf_mem_start() || getfooter(p) > sf_mem_end()) {
+    if(pp < sf_mem_start()+32 || pp > sf_mem_end() - 8 || getfooter(p) > sf_mem_end()-8) {
         sf_errno = EINVAL;
         return NULL;
     }
