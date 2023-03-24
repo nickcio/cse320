@@ -285,7 +285,7 @@ Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT) {
 }
 
 Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
-	//Testing lots of mallocs and frees, then memalign after!
+	//Testing lots of mallocs and frees to see if any crash, then memalign after!
 	double* ptr0 = sf_malloc(sizeof(double)*3);
     double* ptr1 = sf_malloc(sizeof(double)*6);
     double* ptr2 = sf_malloc(sizeof(double)*6);
@@ -322,26 +322,19 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
 	sf_errno = 0;
 	void *p1 = sf_malloc(sizeof(double)*32);
 	cr_assert_not_null(p1, "p1 is NULL!");
-	//Realloc to 0 size should return NULL and not set sf_errno!
+	//Realloc to 0 size should return NULL and not set sf_errno! and free p1
 	void *p1n = sf_realloc(p1,0);
 	cr_assert(sf_errno == 0, "Expected sf_errno to be 0!");
 	cr_assert_null(p1n, "p1n is not NULL!");
 	//Realloc to null pointer should return NULL and set sf_errno to EINVAL!
-	p1n = sf_realloc(p1n,sizeof(double)*40);
+	p1n = sf_realloc(NULL,sizeof(double)*40);
 	cr_assert(sf_errno == EINVAL, "Expected sf_errno to be EINVAL!");
 	cr_assert_null(p1n, "p1n is not NULL!");
 
 	sf_block *bp = (sf_block *)((char *)p1 - sizeof(sf_header));
-	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((bp->header & ~0x7) == 264, "Block size not what was expected!");
 
-	//Now using original pointer to realloc to make sure the data wasn't changed!
-	p1 = sf_realloc(p1,sizeof(double)*40);
-	cr_assert_not_null(p1, "p1 is NULL!");
-
-	sf_block *bp2 = (sf_block *)((char *)p1 - sizeof(sf_header));
-	cr_assert(bp2->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((bp2->header & ~0x7) == 328, "Block size not what was expected!");
+	cr_assert(bp->header & ~THIS_BLOCK_ALLOCATED, "Allocated bit is set!");
+	cr_assert((bp->header & ~0x7) == 4056, "Block size not what was expected!");
 }
 
 Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
