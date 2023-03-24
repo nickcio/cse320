@@ -8,7 +8,6 @@
 #include <errno.h>
 #include "debug.h"
 #include "sfmm.h"
-#include "helper.h"
 
 static size_t MIN_BLOCK_SIZE = 32;
 
