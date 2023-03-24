@@ -466,7 +466,6 @@ void sf_free(void *pp) {
 }
 
 void *sf_realloc(void *pp, size_t rsize) {
-    if(rsize == 0) return NULL;
     size_t fullsize = rsize%8 == 0 ? rsize + 8 : (rsize + 8)+(8-rsize%8);
     if(fullsize < 32) fullsize = 32;
      //A bunch of checks for invalid pointers as described by the doc
@@ -497,6 +496,10 @@ void *sf_realloc(void *pp, size_t rsize) {
     }
 
     pp+=8;
+    if(rsize == 0) {
+        sf_free(pp);
+        return NULL;
+    }
     if(rsize > psize) {
         sf_block *newb = sf_malloc(rsize);
         if(newb != NULL) {
