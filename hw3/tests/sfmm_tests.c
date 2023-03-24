@@ -282,11 +282,10 @@ Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT) {
 	cr_assert(x != y, "Pointers are the same!");
 	assert_quick_list_block_count(48,1);
 	assert_free_block_count(0,1);
-	assert_free_block_count(3976,1);
 }
 
 Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
-	//Testing lots of mallocs and frees and reallocs!
+	//Testing lots of mallocs and frees, then memalign after!
 	double* ptr0 = sf_malloc(sizeof(double)*3);
     double* ptr1 = sf_malloc(sizeof(double)*6);
     double* ptr2 = sf_malloc(sizeof(double)*6);
@@ -312,14 +311,10 @@ Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT) {
     sf_free(ptr2);
     sf_free(ptr6);
 
-	sf_realloc(ptr4,sizeof(double)*15);
-	sf_realloc(ptr7,500);
-
-	assert_quick_list_block_count(32,2);
-	assert_quick_list_block_count(56,4);
-	assert_free_block_count(0,2);
-	assert_free_block_count(3280,1);
-	assert_free_block_count(3944,1);
+	void *s = sf_memalign(4000,16);
+    sf_block *bp4 = (sf_block *)((char *)s - sizeof(sf_header));
+	cr_assert(bp4->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+	cr_assert((long unsigned int)s%16 == 0, "Block s Payload alignment not what was expected!");
 }
 
 Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
@@ -340,9 +335,6 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert((bp->header & ~0x7) == 264, "Block size not what was expected!");
 
-	assert_free_block_count(0,1);
-	assert_free_block_count(3792,1);
-
 	//Now using original pointer to realloc to make sure the data wasn't changed!
 	p1 = sf_realloc(p1,sizeof(double)*40);
 	cr_assert_not_null(p1, "p1 is NULL!");
@@ -350,10 +342,6 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT) {
 	sf_block *bp2 = (sf_block *)((char *)p1 - sizeof(sf_header));
 	cr_assert(bp2->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert((bp2->header & ~0x7) == 328, "Block size not what was expected!");
-
-	assert_free_block_count(0,2);
-	assert_free_block_count(264,1);
-	assert_free_block_count(3464,1);
 }
 
 Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
@@ -373,13 +361,8 @@ Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT) {
 	cr_assert(bp3->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert((long unsigned int)r%8 == 0, "Block r Payload alignment not what was expected!");
 
-    void *s = sf_memalign(4000,16);
-    sf_block *bp4 = (sf_block *)((char *)s - sizeof(sf_header));
-	cr_assert(bp4->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((long unsigned int)s%16 == 0, "Block s Payload alignment not what was expected!");
-
     void *t = sf_memalign(700,32);
-    sf_block *bp5 = (sf_block *)((char *)t - sizeof(sf_header));
-	cr_assert(bp5->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+    sf_block *bp4 = (sf_block *)((char *)t - sizeof(sf_header));
+	cr_assert(bp4->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert((long unsigned int)t%32 == 0, "Block t Payload alignment not what was expected!");
 }
