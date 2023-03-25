@@ -500,7 +500,10 @@ void *sf_realloc(void *pp, size_t rsize) {
         sf_free(pp);
         return NULL;
     }
-    if(rsize > psize) {
+    if(fullsize == psize) {
+        return pp;
+    }
+    if(fullsize > psize) {
         sf_block *newb = sf_malloc(rsize);
         if(newb != NULL) {
             memcpy(newb,pp,psize-8);
@@ -508,9 +511,6 @@ void *sf_realloc(void *pp, size_t rsize) {
             return newb;
         }
         return NULL;
-    }
-    else if(rsize == psize) {
-        return pp;
     }
     void *newb = realsplit(pp-8,fullsize);
 
