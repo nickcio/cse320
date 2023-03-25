@@ -410,7 +410,7 @@ void *sf_malloc(size_t size) {
         else return NULL;
     }
 
-    //refreshpal(sf_mem_start()); //Remove this and the code breaks!
+    refreshpal(sf_mem_start()); //Remove this and the code breaks!
     //Set next pal bit
     sf_block *next = getnextblock(g);
     if(next != sf_mem_end() - 8) next->header|=PREV_BLOCK_ALLOCATED;
@@ -508,6 +508,9 @@ void *sf_realloc(void *pp, size_t rsize) {
             return newb;
         }
         return NULL;
+    }
+    else if(rsize == psize) {
+        return pp;
     }
     void *newb = realsplit(pp-8,fullsize);
 
