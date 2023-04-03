@@ -10,8 +10,13 @@
 
 char *buffer;
 
+void sigint_handler() {
+    debug("Done");
+    exit(EXIT_SUCCESS);
+}
+
 void sigio_handler() {
-    debug("Signo\n");
+    debug("Signo");
     read(STDIN_FILENO,buffer,1024);
     fprintf(stderr,"Buffer: %s\n",buffer);
 }
@@ -19,8 +24,7 @@ void sigio_handler() {
 void handler(int signo) {
     switch(signo) {
         case SIGINT:
-            debug("Done\n");
-            exit(EXIT_SUCCESS);
+            sigint_handler();
             break;
         case SIGCHLD:
             debug("Sigchld\n");
@@ -49,7 +53,7 @@ int ticker(void) {
     sigaction(SIGIO,&newaction,NULL);
     sigaction(SIGCHLD,&newaction,NULL);
 
-    if(fcntl(STDIN_FILENO,F_SETFL,getpid()) == 1) {
+    if(fcntl(STDIN_FILENO,F_SETOWN,getpid()) == 1) {
         perror("fcntl");
         exit(EXIT_FAILURE);
     }
@@ -59,7 +63,7 @@ int ticker(void) {
     }
 
     
-
+    debug("Print process no: %d %d\n",fileno(stdin),STDIN_FILENO);
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     while(1) {
         sigsuspend(&mask);
