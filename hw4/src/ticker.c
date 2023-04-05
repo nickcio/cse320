@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -8,8 +9,6 @@
 #include "debug.h"
 #include "ticker.h"
 
-char *buffer;
-
 void sigint_handler() {
     debug("Done");
     exit(EXIT_SUCCESS);
@@ -17,8 +16,45 @@ void sigint_handler() {
 
 void sigio_handler() {
     debug("Signo");
-    read(STDIN_FILENO,buffer,1024);
-    fprintf(stderr,"Buffer: %s\n",buffer);
+    FILE *fp;
+    size_t bsize = 0;
+    char *buffer;
+
+    if((fp = open_memstream(&buffer,&bsize)) == NULL) {
+        perror("stream");
+        exit(EXIT_FAILURE);
+    }
+
+    char *temp = calloc(128,sizeof(char));
+    fgets(temp,128,stdin);
+    fprintf(fp,"%s",temp);
+    fflush(fp);
+    free(temp);
+
+    int val = -2;
+    if((val = strcmp("quit\n\0",buffer)) == 0) {
+        sigint_handler(); //Gracefully quits 
+    }
+    else if((val = strcmp("watchers\n\0",buffer)) == 0) {
+        fprintf(stderr,"WATCH!\n");
+    }
+    else if((val = strncmp("start ",buffer,6)) == 0) { //takes several args
+        fprintf(stderr,"START!\n");
+    }
+    else if((val = strncmp("stop ",buffer,5)) == 0) { //takes 1 arg
+        fprintf(stderr,"STOP!\n");
+    }
+    else if((val = strncmp("trace ",buffer,6)) == 0) { //takes 1 arg
+        fprintf(stderr,"TRACE!\n");
+    }
+    else if((val = strncmp("untrace ",buffer,8)) == 0) { //takes 1 arg
+        fprintf(stderr,"UNTRACE!\n");
+    }
+    else if((val = strncmp("stop ",buffer,5)) == 0) { //takes 1 arg
+        fprintf(stderr,"STOP!\n");
+    }
+    else fprintf(stderr,"???\n");
+    free(buffer);
 }
 
 void handler(int signo) {
@@ -38,13 +74,6 @@ void handler(int signo) {
 }
 
 int ticker(void) {
-    buffer = calloc(1024,sizeof(char));
-    sigset_t mask;
-    sigfillset(&mask);
-    sigdelset(&mask,SIGINT);
-    sigdelset(&mask,SIGCHLD);
-    sigdelset(&mask,SIGIO);
-
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;
     sigemptyset(&newaction.sa_mask);
@@ -52,6 +81,11 @@ int ticker(void) {
     sigaction(SIGINT,&newaction,NULL);
     sigaction(SIGIO,&newaction,NULL);
     sigaction(SIGCHLD,&newaction,NULL);
+    sigset_t mask;
+    sigfillset(&mask);
+    sigdelset(&mask,SIGINT);
+    sigdelset(&mask,SIGCHLD);
+    sigdelset(&mask,SIGIO);
 
     if(fcntl(STDIN_FILENO,F_SETOWN,getpid()) == 1) {
         perror("fcntl");
@@ -62,10 +96,10 @@ int ticker(void) {
         exit(EXIT_FAILURE);
     }
 
-    
-    debug("Print process no: %d %d\n",fileno(stdin),STDIN_FILENO);
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
+    //Initializing OVER!
     while(1) {
+        fprintf(stderr,"ticker> ");
         sigsuspend(&mask);
     }
 
