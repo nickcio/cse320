@@ -9,6 +9,9 @@
 #include "debug.h"
 #include "ticker.h"
 
+volatile int sigflag = 0;
+volatile int pipedinput = 0;
+
 void sigint_handler() {
     debug("Done");
     exit(EXIT_SUCCESS);
@@ -25,14 +28,15 @@ void sigio_handler() {
         exit(EXIT_FAILURE);
     }
 
-    char *temp = calloc(128,sizeof(char));
-    fgets(temp,128,stdin);
+    char temp[128] = {'\0'};
+    int end = read(STDIN_FILENO,temp,128);
+    if(end == 0) sigint_handler();
+    //fgets(temp,128,stdin);
     fprintf(fp,"%s",temp);
     fflush(fp);
-    free(temp);
 
     int val = -2;
-    if((val = strcmp("quit\n\0",buffer)) == 0) {
+    if(((val = strcmp("quit\n\0",buffer)) == 0) || buffer[0] == EOF) {
         sigint_handler(); //Gracefully quits 
     }
     else if((val = strcmp("watchers\n\0",buffer)) == 0) {
@@ -53,8 +57,10 @@ void sigio_handler() {
     else if((val = strncmp("stop ",buffer,5)) == 0) { //takes 1 arg
         fprintf(stderr,"STOP!\n");
     }
-    else fprintf(stderr,"???\n");
+    else if(pipedinput) fprintf(stderr,"???\n");
     free(buffer);
+    sigflag = 0;
+    pipedinput = 1;
 }
 
 void handler(int signo) {
@@ -66,14 +72,16 @@ void handler(int signo) {
             debug("Sigchld\n");
             break;
         case SIGIO:
-            sigio_handler();
+            sigflag = SIGIO;
             break;
         default:
+            sigflag = 0;
             break;
     }
 }
 
 int ticker(void) {
+    sigflag = 0;
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;
     sigemptyset(&newaction.sa_mask);
@@ -96,9 +104,14 @@ int ticker(void) {
         exit(EXIT_FAILURE);
     }
 
+    
+    
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     //Initializing OVER!
+    raise(SIGIO);
+    sleep(0.01);
     while(1) {
+        if(sigflag == SIGIO) sigio_handler();
         fprintf(stderr,"ticker> ");
         sigsuspend(&mask);
     }
