@@ -8,6 +8,7 @@
 #include <sys/wait.h>
 #include "debug.h"
 #include "ticker.h"
+#include <regex.h>
 
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
@@ -31,33 +32,55 @@ void sigio_handler() {
     char temp[128] = {'\0'};
     int end = read(STDIN_FILENO,temp,128);
     if(end == 0) sigint_handler();
-    //fgets(temp,128,stdin);
     fprintf(fp,"%s",temp);
     fflush(fp);
+
+    regex_t regstart;
+    int regerr = regcomp(&regstart,"start ((\\S+) )*(\\S+)\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
+    regex_t regstop;
+    regerr = regcomp(&regstop,"stop [0-9]+\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
+    regex_t regtrace;
+    regerr = regcomp(&regtrace,"trace [0-9]+\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
+    regex_t reguntrace;
+    regerr = regcomp(&reguntrace,"untrace [0-9]+\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
+    regex_t regshow;
+    regerr = regcomp(&regshow,"show [0-9]+\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
 
     int val = -2;
     if(((val = strcmp("quit\n\0",buffer)) == 0) || buffer[0] == EOF) {
         sigint_handler(); //Gracefully quits 
     }
-    else if((val = strcmp("watchers\n\0",buffer)) == 0) {
+    else if((val = strncmp("watchers\n",buffer,9)) == 0) {
         fprintf(stderr,"WATCH!\n");
     }
-    else if((val = strncmp("start ",buffer,6)) == 0) { //takes several args
+    else if((val = regexec(&regstart,buffer,0,NULL,0)) == 0) { //takes several args
         fprintf(stderr,"START!\n");
     }
-    else if((val = strncmp("stop ",buffer,5)) == 0) { //takes 1 arg
+    else if((val = regexec(&regstop,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"STOP!\n");
     }
-    else if((val = strncmp("trace ",buffer,6)) == 0) { //takes 1 arg
+    else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"TRACE!\n");
     }
-    else if((val = strncmp("untrace ",buffer,8)) == 0) { //takes 1 arg
+    else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"UNTRACE!\n");
     }
-    else if((val = strncmp("stop ",buffer,5)) == 0) { //takes 1 arg
-        fprintf(stderr,"STOP!\n");
+    else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
+        fprintf(stderr,"SHOW!\n");
     }
-    else if(pipedinput) fprintf(stderr,"???\n");
+    else if(pipedinput) {
+        fprintf(stdout,"???\n");
+        fflush(stdout);
+    }
+    if(!pipedinput) {
+        pipedinput = 1;
+        sigint_handler();
+    }
     free(buffer);
     sigflag = 0;
     pipedinput = 1;
@@ -81,6 +104,7 @@ void handler(int signo) {
 }
 
 int ticker(void) {
+    sigio_handler();
     sigflag = 0;
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;
@@ -104,15 +128,13 @@ int ticker(void) {
         exit(EXIT_FAILURE);
     }
 
-    
-    
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     //Initializing OVER!
-    raise(SIGIO);
-    sleep(0.01);
+    //sleep(0.01);
     while(1) {
         if(sigflag == SIGIO) sigio_handler();
-        fprintf(stderr,"ticker> ");
+        fprintf(stdout,"ticker> ");
+        fflush(stdout);
         sigsuspend(&mask);
     }
 
