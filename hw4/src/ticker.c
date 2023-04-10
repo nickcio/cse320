@@ -45,8 +45,7 @@ int del_watcher(int id) {
         return -1;
     }
     else {
-        WATCHER *curr = watcher_list.first;
-        while(curr->next != NULL && curr->id != id) curr = curr->next;
+        WATCHER *curr = find_watcher(id);
         if(curr==NULL) return -1;
         if(curr->prev != NULL) curr->prev->next = curr->next;
         if(curr->next != NULL) curr->next->prev = curr->prev;
@@ -57,8 +56,10 @@ int del_watcher(int id) {
     return 0;
 }
 
-int find_watcher(int id) {
-    return 0;
+WATCHER *find_watcher(int id) {
+    WATCHER *curr = watcher_list.first;
+    while(curr->next != NULL && curr->id != id) curr = curr->next;
+    return curr;
 }
 
 void sigint_handler() {
@@ -84,6 +85,16 @@ void sigio_handler() {
     if(end == 0) sigint_handler();
     fprintf(fp,"%s",temp);
     fflush(fp);
+    int total = end;
+    while(buffer[total-1] != '\n' && end != -1) {
+        memset(temp,0,1024);
+        int nex = read(STDIN_FILENO,temp,1024);
+        if(nex > 0) {
+            total += nex;
+            fprintf(fp,"%s",temp);
+            fflush(fp);
+        }
+    }
 
     watcher_types[CLI_WATCHER_TYPE].recv(cli,buffer);
 

@@ -17,4 +17,6 @@ int add_watcher(WATCHER *watcher); //Add by pointer
 
 int del_watcher(int id); //Delete by id
 
+WATCHER *find_watcher(int id);
+
 void sigint_handler();

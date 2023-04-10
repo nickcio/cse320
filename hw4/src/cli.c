@@ -49,7 +49,7 @@ int cli_watcher_send(WATCHER *wp, void *arg) {
 
 int cli_watcher_recv(WATCHER *wp, char *txt) {
     char *buffer = txt;
-    if(wp->trace) {
+    if(wp->trace == 1) {
         struct timespec thetime;
         clock_gettime(CLOCK_REALTIME,&thetime);
         fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
@@ -93,10 +93,11 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         fprintf(stderr,"STOP!\n");
     }
     else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
+        //get ID
         wp->wtype->trace(wp,1);
     }
     else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"UNTRACE!\n");
+        wp->wtype->trace(wp,0);
     }
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"SHOW!\n");
