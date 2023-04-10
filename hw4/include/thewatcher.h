@@ -8,6 +8,8 @@ typedef struct watcher {
     int ofd; //file descriptor of output
     WATCHER *next;
     WATCHER *prev;
+    int trace;
+    int serial;
     char **args; //additional args
 } WATCHER;
 

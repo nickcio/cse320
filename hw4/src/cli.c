@@ -7,6 +7,7 @@
 #include "thewatcher.h"
 #include <regex.h>
 #include <string.h>
+#include <time.h>
 
 extern int idcount;
 extern int pipedinput;
@@ -22,6 +23,8 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
         .pid = -1,
         .ifd = STDIN_FILENO,
         .ofd = STDOUT_FILENO,
+        .trace = 0,
+        .serial = 0,
         .args = args
     };
     WATCHER *cliw = malloc(sizeof(WATCHER));
@@ -33,17 +36,24 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
 }
 
 int cli_watcher_stop(WATCHER *wp) {
-    fprintf(stdout,"???\n");
+    cli_watcher_send(wp,"???\n");
     return EXIT_SUCCESS;
 }
 
 int cli_watcher_send(WATCHER *wp, void *arg) {
-    // TO BE IMPLEMENTED
-    abort();
+    char *carg = arg;
+    dprintf(wp->ofd,"%s",carg);
+    fflush(stdout);
+    return EXIT_SUCCESS;
 }
 
 int cli_watcher_recv(WATCHER *wp, char *txt) {
     char *buffer = txt;
+    if(wp->trace) {
+        struct timespec thetime;
+        clock_gettime(CLOCK_REALTIME,&thetime);
+        fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
+    }
     regex_t regwatch;
     int regerr = regcomp(&regwatch,"watchers(\\s)*\n",REG_EXTENDED);
     if(regerr) sigint_handler();
@@ -68,7 +78,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         sigint_handler(); //Gracefully quits 
     }
     else if((val = regexec(&regwatch,buffer,0,NULL,0)) == 0) {
-        if(!pipedinput) fprintf(stdout,"ticker> ");
+        if(!pipedinput) cli_watcher_send(wp,"ticker> ");
         WATCHER *curr = watcher_list.first;
         while(curr != NULL) {
             dprintf(wp->ofd,"%d\t%s(%d,%d,%d)\n",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
@@ -83,7 +93,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         fprintf(stderr,"STOP!\n");
     }
     else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"TRACE!\n");
+        wp->wtype->trace(wp,1);
     }
     else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"UNTRACE!\n");
@@ -92,20 +102,20 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         fprintf(stderr,"SHOW!\n");
     }
     else if(pipedinput) {
-        dprintf(wp->ofd,"???\n");
-        //fflush(stdout);
+        cli_watcher_send(wp,"???\n");
     }
     if(!pipedinput) {
         pipedinput = 1;
         if(strlen(buffer) != 0) {
-            dprintf(wp->ofd,"ticker> ");
+            cli_watcher_send(wp,"ticker> ");
             sigint_handler();
         }
     }
+    wp->serial++;
     return EXIT_SUCCESS;
 }
 
 int cli_watcher_trace(WATCHER *wp, int enable) {
-    // TO BE IMPLEMENTED
-    abort();
+    wp->trace = enable;
+    return EXIT_SUCCESS;
 }
