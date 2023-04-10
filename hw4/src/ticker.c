@@ -9,12 +9,51 @@
 #include "debug.h"
 #include "ticker.h"
 #include <regex.h>
+#include "linked.h"
 
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
+int idcount = 0;
+
+int add_watcher(WATCHER *watcher) {
+    if(watcher_list.length == 0) {
+        watcher_list.first = watcher;
+        watcher->next = NULL;
+        watcher->prev = NULL;
+    }
+    else {
+        WATCHER *curr = watcher_list.first;
+        while(curr->next != NULL) curr = curr->next;
+        curr->next = watcher;
+        watcher->prev = curr;
+        watcher->next = NULL;
+    }
+    watcher_list.length+=1;
+    return 0;
+}
+
+int del_watcher(int id) {
+    if(watcher_list.length <= 0) {
+        watcher_list.length = 0;
+        return -1;
+    }
+    else {
+        WATCHER *curr = watcher_list.first;
+        while(curr->next != NULL && curr->id != id) curr = curr->next;
+        if(curr==NULL) return -1;
+        if(curr->prev != NULL) curr->prev->next = curr->next;
+        if(curr->next != NULL) curr->next->prev = curr->prev;
+        curr->wtype->stop(curr);
+    }
+    watcher_list.length-=1;
+    if(watcher_list.length==0)watcher_list.first = NULL;
+    return 0;
+}
 
 void sigint_handler() {
     debug("Done");
+    fprintf(stdout,"ticker> ");
+    fflush(stdout);
     exit(EXIT_SUCCESS);
 }
 
@@ -23,20 +62,23 @@ void sigio_handler() {
     FILE *fp;
     size_t bsize = 0;
     char *buffer;
-
+    
     if((fp = open_memstream(&buffer,&bsize)) == NULL) {
         perror("stream");
         exit(EXIT_FAILURE);
     }
 
-    char temp[128] = {'\0'};
-    int end = read(STDIN_FILENO,temp,128);
+    char temp[1024] = {'\0'};
+    int end = read(STDIN_FILENO,temp,1024);
     if(end == 0) sigint_handler();
     fprintf(fp,"%s",temp);
     fflush(fp);
 
+    regex_t regwatch;
+    int regerr = regcomp(&regwatch,"watchers(\\s)*\n",REG_EXTENDED);
+    if(regerr) sigint_handler();
     regex_t regstart;
-    int regerr = regcomp(&regstart,"start ((\\S+) )*(\\S+)\n",REG_EXTENDED);
+    regerr = regcomp(&regstart,"start ((\\S+) )*(\\S+)\n",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regstop;
     regerr = regcomp(&regstop,"stop [0-9]+\n",REG_EXTENDED);
@@ -50,13 +92,19 @@ void sigio_handler() {
     regex_t regshow;
     regerr = regcomp(&regshow,"show [0-9]+\n",REG_EXTENDED);
     if(regerr) sigint_handler();
-
+    
     int val = -2;
     if(((val = strcmp("quit\n\0",buffer)) == 0) || buffer[0] == EOF) {
         sigint_handler(); //Gracefully quits 
     }
-    else if((val = strncmp("watchers\n",buffer,9)) == 0) {
-        fprintf(stderr,"WATCH!\n");
+    else if((val = regexec(&regwatch,buffer,0,NULL,0)) == 0) {
+        if(!pipedinput) fprintf(stdout,"ticker> ");
+        WATCHER *curr = watcher_list.first;
+        while(curr != NULL) {
+            fprintf(stdout,"%d\t%s(%d,%d,%d)\n",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
+            curr = curr->next;
+        }
+        fflush(stdout);
     }
     else if((val = regexec(&regstart,buffer,0,NULL,0)) == 0) { //takes several args
         fprintf(stderr,"START!\n");
@@ -75,11 +123,14 @@ void sigio_handler() {
     }
     else if(pipedinput) {
         fprintf(stdout,"???\n");
-        fflush(stdout);
+        //fflush(stdout);
     }
     if(!pipedinput) {
         pipedinput = 1;
-        sigint_handler();
+        if(strlen(buffer) != 0) {
+            fprintf(stdout,"ticker> ");
+            sigint_handler();
+        }
     }
     free(buffer);
     sigflag = 0;
@@ -104,7 +155,8 @@ void handler(int signo) {
 }
 
 int ticker(void) {
-    sigio_handler();
+    char *args = "";
+    add_watcher(watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],&args));
     sigflag = 0;
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;
@@ -127,10 +179,8 @@ int ticker(void) {
         perror("fcntl");
         exit(EXIT_FAILURE);
     }
-
+    sigio_handler(); //handle piped input
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
-    //Initializing OVER!
-    //sleep(0.01);
     while(1) {
         if(sigflag == SIGIO) sigio_handler();
         fprintf(stdout,"ticker> ");
