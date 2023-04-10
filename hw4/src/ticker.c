@@ -82,7 +82,10 @@ void sigio_handler() {
 
     char temp[1024] = {'\0'};
     int end = read(STDIN_FILENO,temp,1024);
-    if(end == 0) sigint_handler();
+    if(end == 0) {
+        free(buffer);
+        sigint_handler();
+    }
     fprintf(fp,"%s",temp);
     fflush(fp);
     int total = end;
@@ -93,6 +96,10 @@ void sigio_handler() {
             total += nex;
             fprintf(fp,"%s",temp);
             fflush(fp);
+        }
+        else if(nex == 0) {
+            free(buffer);
+            sigint_handler();
         }
     }
 
