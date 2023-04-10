@@ -9,11 +9,18 @@
 #include "debug.h"
 #include "ticker.h"
 #include <regex.h>
-#include "linked.h"
+#include "thewatcher.h"
 
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
 int idcount = 0;
+
+struct {
+    int length;
+    WATCHER *first;
+} watcher_list;
+
+WATCHER *cli = NULL;
 
 int add_watcher(WATCHER *watcher) {
     if(watcher_list.length == 0) {
@@ -50,6 +57,10 @@ int del_watcher(int id) {
     return 0;
 }
 
+int find_watcher(int id) {
+    return 0;
+}
+
 void sigint_handler() {
     debug("Done");
     fprintf(stdout,"ticker> ");
@@ -74,64 +85,8 @@ void sigio_handler() {
     fprintf(fp,"%s",temp);
     fflush(fp);
 
-    regex_t regwatch;
-    int regerr = regcomp(&regwatch,"watchers(\\s)*\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    regex_t regstart;
-    regerr = regcomp(&regstart,"start ((\\S+) )*(\\S+)\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    regex_t regstop;
-    regerr = regcomp(&regstop,"stop [0-9]+\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    regex_t regtrace;
-    regerr = regcomp(&regtrace,"trace [0-9]+\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    regex_t reguntrace;
-    regerr = regcomp(&reguntrace,"untrace [0-9]+\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    regex_t regshow;
-    regerr = regcomp(&regshow,"show [0-9]+\n",REG_EXTENDED);
-    if(regerr) sigint_handler();
-    
-    int val = -2;
-    if(((val = strcmp("quit\n\0",buffer)) == 0) || buffer[0] == EOF) {
-        sigint_handler(); //Gracefully quits 
-    }
-    else if((val = regexec(&regwatch,buffer,0,NULL,0)) == 0) {
-        if(!pipedinput) fprintf(stdout,"ticker> ");
-        WATCHER *curr = watcher_list.first;
-        while(curr != NULL) {
-            fprintf(stdout,"%d\t%s(%d,%d,%d)\n",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
-            curr = curr->next;
-        }
-        fflush(stdout);
-    }
-    else if((val = regexec(&regstart,buffer,0,NULL,0)) == 0) { //takes several args
-        fprintf(stderr,"START!\n");
-    }
-    else if((val = regexec(&regstop,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"STOP!\n");
-    }
-    else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"TRACE!\n");
-    }
-    else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"UNTRACE!\n");
-    }
-    else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"SHOW!\n");
-    }
-    else if(pipedinput) {
-        fprintf(stdout,"???\n");
-        //fflush(stdout);
-    }
-    if(!pipedinput) {
-        pipedinput = 1;
-        if(strlen(buffer) != 0) {
-            fprintf(stdout,"ticker> ");
-            sigint_handler();
-        }
-    }
+    watcher_types[CLI_WATCHER_TYPE].recv(cli,buffer);
+
     free(buffer);
     sigflag = 0;
     pipedinput = 1;
@@ -156,7 +111,7 @@ void handler(int signo) {
 
 int ticker(void) {
     char *args = "";
-    add_watcher(watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],&args));
+    cli = watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],&args);
     sigflag = 0;
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;

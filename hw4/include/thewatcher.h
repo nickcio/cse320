@@ -11,3 +11,8 @@ typedef struct watcher {
     char **args; //additional args
 } WATCHER;
 
+int add_watcher(WATCHER *watcher); //Add by pointer
+
+int del_watcher(int id); //Delete by id
+
+void sigint_handler();
