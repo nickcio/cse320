@@ -49,28 +49,28 @@ int cli_watcher_send(WATCHER *wp, void *arg) {
 
 int cli_watcher_recv(WATCHER *wp, char *txt) {
     char *buffer = txt;
-    if(wp->trace == 1) {
+    if(wp->trace) {
         struct timespec thetime;
         clock_gettime(CLOCK_REALTIME,&thetime);
         fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
     }
     regex_t regwatch;
-    int regerr = regcomp(&regwatch,"watchers(\\s)*\n",REG_EXTENDED);
+    int regerr = regcomp(&regwatch,"^watchers(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regstart;
-    regerr = regcomp(&regstart,"start(\\s)+((\\S+)(\\s)+)*(\\S+)(\\s)*\n",REG_EXTENDED);
+    regerr = regcomp(&regstart,"^start(\\s)+((\\S+)(\\s)+)*(\\S+)(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regstop;
-    regerr = regcomp(&regstop,"stop(\\s)+[0-9]+(\\s)*\n",REG_EXTENDED);
+    regerr = regcomp(&regstop,"^stop(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regtrace;
-    regerr = regcomp(&regtrace,"trace(\\s)+[0-9]+(\\s)*\n",REG_EXTENDED);
+    regerr = regcomp(&regtrace,"^trace(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t reguntrace;
-    regerr = regcomp(&reguntrace,"untrace(\\s)+[0-9]+(\\s)*\n",REG_EXTENDED);
+    regerr = regcomp(&reguntrace,"^untrace(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regshow;
-    regerr = regcomp(&regshow,"show(\\s)+[0-9]+(\\s)*\n",REG_EXTENDED);
+    regerr = regcomp(&regshow,"^show(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     
     int val = -2;
