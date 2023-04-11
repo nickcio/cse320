@@ -25,7 +25,7 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
         .ofd = STDOUT_FILENO,
         .trace = 0,
         .serial = 0,
-        .args = args
+        .args = NULL
     };
     WATCHER *cliw = malloc(sizeof(WATCHER));
     *cliw = this;
@@ -81,7 +81,30 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         if(!pipedinput) cli_watcher_send(wp,"ticker> ");
         WATCHER *curr = watcher_list.first;
         while(curr != NULL) {
-            dprintf(wp->ofd,"%d\t%s(%d,%d,%d)\n",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
+            dprintf(wp->ofd,"%d\t%s(%d,%d,%d) ",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
+            char **argv = curr->wtype->argv;
+            if(argv != NULL) {
+                int i = 0;
+                char *carg = argv[0];
+                while(carg != NULL) {
+                    dprintf(wp->ofd,"%s ",carg);
+                    i++;
+                    carg = argv[i];
+                }
+            }
+            char **args = curr->args;
+            if(args != NULL) {
+                dprintf(wp->ofd,"[");
+                int i = 0;
+                char *carg = args[0];
+                while(carg != NULL) {
+                    dprintf(wp->ofd,"%s ",carg);
+                    i++;
+                    carg = args[i];
+                }
+                dprintf(wp->ofd,"]");
+            }
+            dprintf(wp->ofd,"\n");
             curr = curr->next;
         }
         fflush(stdout);

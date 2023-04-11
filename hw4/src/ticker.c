@@ -10,6 +10,7 @@
 #include "ticker.h"
 #include <regex.h>
 #include "thewatcher.h"
+#include <ctype.h>
 
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
@@ -21,6 +22,10 @@ struct {
 } watcher_list;
 
 WATCHER *cli = NULL;
+
+char **parse_args(char *txt) {
+    return NULL;
+}
 
 int add_watcher(WATCHER *watcher) {
     if(watcher_list.length == 0) {
@@ -128,8 +133,7 @@ void handler(int signo) {
 }
 
 int ticker(void) {
-    char *args = "";
-    cli = watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],&args);
+    cli = watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],NULL);
     sigflag = 0;
     struct sigaction newaction = {0};
     newaction.sa_handler = handler;

@@ -13,6 +13,8 @@ typedef struct watcher {
     char **args; //additional args
 } WATCHER;
 
+char **parse_args(char *txt); //parses args, allocates data
+
 int add_watcher(WATCHER *watcher); //Add by pointer
 
 int del_watcher(int id); //Delete by id
