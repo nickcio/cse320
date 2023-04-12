@@ -14,6 +14,7 @@
 
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
+volatile int donepiping = 0;
 int idcount = 0;
 
 struct {
@@ -38,7 +39,6 @@ char **parse_args(char *txt) {
         else lastspace = 0;
         pc++;
     }
-    //fprintf(stderr,"Count: %d\n",argcount);
     char **args = malloc(sizeof(char *)*(argcount + 1));
     int c = 0;
     char *pp = start;
@@ -89,11 +89,12 @@ void sigio_handler() {
     char temp[1024] = {'\0'};
     int end = read(STDIN_FILENO,temp,1024);
     if(end == 0) {
-        free(buffer);
+        if(bsize > 0) free(buffer);
         sigint_handler();
     }
     fprintf(fp,"%s",temp);
     fflush(fp);
+    if(bsize == 0) donepiping = 1;
     int total = end;
     while(buffer[total-1] != '\n' && end != -1) {
         memset(temp,0,1024);
@@ -104,14 +105,30 @@ void sigio_handler() {
             fflush(fp);
         }
         else if(nex == 0) {
-            free(buffer);
+            if(bsize > 0) free(buffer);
             sigint_handler();
         }
     }
 
-    watcher_types[CLI_WATCHER_TYPE].recv(cli,buffer);
-
+    
+    char *bp = buffer;
+    while(*bp != '\0') {
+        char *zp = bp;
+        int size = 0;
+        while(*zp != '\n' && *zp != '\0') {
+            zp++;
+            size++;
+        }
+        if(*zp == '\0') break;
+        char *seq = calloc(size+2,sizeof(char));
+        memcpy(seq,bp,size+1);
+        seq[size+1] = '\0';
+        watcher_types[CLI_WATCHER_TYPE].recv(cli,seq);
+        free(seq);
+        bp = zp+1;
+    }
     free(buffer);
+    if(!donepiping) sigint_handler();
     sigflag = 0;
     pipedinput = 1;
 }
@@ -158,6 +175,7 @@ int ticker(void) {
         exit(EXIT_FAILURE);
     }
     sigio_handler(); //handle piped input
+    donepiping = 1;
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     while(1) {
         if(sigflag == SIGIO) sigio_handler();

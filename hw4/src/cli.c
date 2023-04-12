@@ -12,6 +12,7 @@
 
 extern int idcount;
 extern int pipedinput;
+extern int donepiping;
 extern struct {
     int length;
     WATCHER *first;
@@ -73,18 +74,20 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
     regex_t regshow;
     regerr = regcomp(&regshow,"^show(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
-    
+
     int val = -2;
-    if(((val = strcmp("quit\n\0",buffer)) == 0) || buffer[0] == EOF) {
+    if(((val = strcmp("quit\n",buffer)) == 0) || buffer[0] == EOF) {
+        cli_watcher_send(wp,"ticker> ");
         sigint_handler(); //Gracefully quits 
     }
     else if((val = regexec(&regwatch,buffer,0,NULL,0)) == 0) {
         if(!pipedinput) cli_watcher_send(wp,"ticker> ");
         WATCHER *curr = watcher_list.first;
         while(curr != NULL) {
-            dprintf(wp->ofd,"%d\t%s(%d,%d,%d) ",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
+            dprintf(wp->ofd,"%d\t%s(%d,%d,%d)",curr->id,curr->wtype->name,curr->pid,curr->ifd,curr->ofd);
             char **argv = curr->wtype->argv;
             if(argv != NULL) {
+                dprintf(wp->ofd," ");
                 int i = 0;
                 char *carg = argv[0];
                 while(carg != NULL) {
@@ -132,13 +135,15 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
                 watcher_types[wtype].start(&watcher_types[wtype],inargs);
             }
         }
-        else cli_watcher_send(wp,"???\n");
+        else {
+            cli_watcher_send(wp,"???\n");
+        }
     }
     else if((val = regexec(&regstop,buffer,0,NULL,0)) == 0) { //takes 1 arg
         char* arg = parse_args(buffer+5)[0];
         int idnum = 0;
         int valid = 1;
-        while(*arg != '\0') {
+        while(*arg != '\0' && *arg != '\n') {
             if(!isdigit(*arg)) {
                 valid = 0;
                 break;
@@ -150,7 +155,10 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         if(!valid) cli_watcher_send(wp,"???\n");
         else{
             WATCHER *this = find_watcher(idnum);
-            if(this != NULL) this->wtype->stop(this);
+            if(this != NULL) {
+                if(strcmp(this->wtype->name,"CLI") == 0) cli_watcher_send(wp,"???\n");
+                else this->wtype->stop(this);
+            }
             else cli_watcher_send(wp,"???\n");
         }
     }
@@ -202,11 +210,16 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
     else if(pipedinput) {
         cli_watcher_send(wp,"???\n");
     }
+    else if(!pipedinput) {
+        if(strlen(buffer) != 0) cli_watcher_send(wp,"ticker> ???\n");
+    }
     if(!pipedinput) {
-        pipedinput = 1;
+        //pipedinput = 1;
         if(strlen(buffer) != 0) {
-            cli_watcher_send(wp,"ticker> ");
-            sigint_handler();
+            //sigint_handler();
+        }
+        else{
+            donepiping = 1;
         }
     }
     wp->serial++;
@@ -245,7 +258,6 @@ int del_watcher(int id) {
         if(curr==NULL) return -1;
         if(curr->prev != NULL) curr->prev->next = curr->next;
         if(curr->next != NULL) curr->next->prev = curr->prev;
-        curr->wtype->stop(curr);
     }
     watcher_list.length-=1;
     if(watcher_list.length==0)watcher_list.first = NULL;

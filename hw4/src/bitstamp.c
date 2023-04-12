@@ -37,11 +37,13 @@ int bitstamp_watcher_stop(WATCHER *wp) {
     del_watcher(wp->id);
     char **args = wp->args;
     if(args != NULL) {
+        char **start = args;
         while(*args != NULL){
             free(*args);
             args++;
         }
-        free(args);
+        free(start[-1]);
+        free(start-1);
     }
     return EXIT_SUCCESS;
 }
