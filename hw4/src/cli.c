@@ -8,6 +8,7 @@
 #include <regex.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 
 extern int idcount;
 extern int pipedinput;
@@ -98,9 +99,10 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
                 int i = 0;
                 char *carg = args[0];
                 while(carg != NULL) {
-                    dprintf(wp->ofd,"%s ",carg);
+                    dprintf(wp->ofd,"%s",carg);
                     i++;
                     carg = args[i];
+                    if(carg != NULL) dprintf(wp->ofd," ");
                 }
                 dprintf(wp->ofd,"]");
             }
@@ -110,17 +112,89 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         fflush(stdout);
     }
     else if((val = regexec(&regstart,buffer,0,NULL,0)) == 0) { //takes several args
-        fprintf(stderr,"START!\n");
+        char **args = parse_args(buffer+5);
+        int wat = -2;
+        int wtype = 0;
+        int found = 0;
+        while(watcher_types[wtype].name != NULL) {
+            if((wat = strcmp(args[0],watcher_types[wtype].name))==0) {
+                fprintf(stderr,"FOUND TYPE! %d\n",wtype);
+                found = 1;
+                break;
+            }
+            wtype++;
+        }
+        if(found) {
+            if(wtype == CLI_WATCHER_TYPE) cli_watcher_send(wp,"???\n");
+            else{
+                char **inargs = args+1;
+                if(*inargs == NULL) inargs = NULL;
+                watcher_types[wtype].start(&watcher_types[wtype],inargs);
+            }
+        }
+        else cli_watcher_send(wp,"???\n");
     }
     else if((val = regexec(&regstop,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"STOP!\n");
+        char* arg = parse_args(buffer+5)[0];
+        int idnum = 0;
+        int valid = 1;
+        while(*arg != '\0') {
+            if(!isdigit(*arg)) {
+                valid = 0;
+                break;
+            }
+            idnum*=10;
+            idnum+=(*arg)-48;
+            arg++;
+        }
+        if(!valid) cli_watcher_send(wp,"???\n");
+        else{
+            WATCHER *this = find_watcher(idnum);
+            if(this != NULL) this->wtype->stop(this);
+            else cli_watcher_send(wp,"???\n");
+        }
     }
     else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         //get ID
-        wp->wtype->trace(wp,1);
+        char* arg = parse_args(buffer+5)[0];
+        int idnum = 0;
+        int valid = 1;
+        while(*arg != '\0') {
+            if(!isdigit(*arg)) {
+                valid = 0;
+                break;
+            }
+            idnum*=10;
+            idnum+=(*arg)-48;
+            arg++;
+        }
+        if(!valid) cli_watcher_send(wp,"???\n");
+        else{
+            WATCHER *this = find_watcher(idnum);
+            if(this != NULL) this->wtype->trace(this,1);
+            else cli_watcher_send(wp,"???\n");
+        }
     }
     else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        wp->wtype->trace(wp,0);
+        //get ID
+        char* arg = parse_args(buffer+7)[0];
+        int idnum = 0;
+        int valid = 1;
+        while(*arg != '\0') {
+            if(!isdigit(*arg)) {
+                valid = 0;
+                break;
+            }
+            idnum*=10;
+            idnum+=(*arg)-48;
+            arg++;
+        }
+        if(!valid) cli_watcher_send(wp,"???\n");
+        else{
+            WATCHER *this = find_watcher(idnum);
+            if(this != NULL) this->wtype->trace(this,0);
+            else cli_watcher_send(wp,"???\n");
+        }
     }
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
         fprintf(stderr,"SHOW!\n");
@@ -142,4 +216,44 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
 int cli_watcher_trace(WATCHER *wp, int enable) {
     wp->trace = enable;
     return EXIT_SUCCESS;
+}
+
+int add_watcher(WATCHER *watcher) {
+    if(watcher_list.length == 0) {
+        watcher_list.first = watcher;
+        watcher->next = NULL;
+        watcher->prev = NULL;
+    }
+    else {
+        WATCHER *curr = watcher_list.first;
+        while(curr->next != NULL) curr = curr->next;
+        curr->next = watcher;
+        watcher->prev = curr;
+        watcher->next = NULL;
+    }
+    watcher_list.length+=1;
+    return 0;
+}
+
+int del_watcher(int id) {
+    if(watcher_list.length <= 0) {
+        watcher_list.length = 0;
+        return -1;
+    }
+    else {
+        WATCHER *curr = find_watcher(id);
+        if(curr==NULL) return -1;
+        if(curr->prev != NULL) curr->prev->next = curr->next;
+        if(curr->next != NULL) curr->next->prev = curr->prev;
+        curr->wtype->stop(curr);
+    }
+    watcher_list.length-=1;
+    if(watcher_list.length==0)watcher_list.first = NULL;
+    return 0;
+}
+
+WATCHER *find_watcher(int id) {
+    WATCHER *curr = watcher_list.first;
+    while(curr != NULL && curr->id != id) curr = curr->next;
+    return curr;
 }

@@ -24,47 +24,48 @@ struct {
 WATCHER *cli = NULL;
 
 char **parse_args(char *txt) {
-    return NULL;
-}
-
-int add_watcher(WATCHER *watcher) {
-    if(watcher_list.length == 0) {
-        watcher_list.first = watcher;
-        watcher->next = NULL;
-        watcher->prev = NULL;
+    if(txt == NULL) return NULL;
+    //fprintf(stderr,"Txt: %s\n",txt);
+    char *start = txt;
+    int argcount = 0;
+    int lastspace = 1;
+    while(isspace(*start) && *start != '\0') start++;
+    //fprintf(stderr,"Start: %s\n",start);
+    char* pc = start;
+    while(*pc != '\0') {
+        if(!isspace(*pc) && lastspace) argcount++;
+        if(isspace(*pc)) lastspace = 1;
+        else lastspace = 0;
+        pc++;
     }
-    else {
-        WATCHER *curr = watcher_list.first;
-        while(curr->next != NULL) curr = curr->next;
-        curr->next = watcher;
-        watcher->prev = curr;
-        watcher->next = NULL;
+    //fprintf(stderr,"Count: %d\n",argcount);
+    char **args = malloc(sizeof(char *)*(argcount + 1));
+    int c = 0;
+    char *pp = start;
+    while(c < argcount) {
+        FILE *fp;
+        size_t bsize = 0;
+        char *buffer;
+        if((fp = open_memstream(&buffer,&bsize)) == NULL) {
+            perror("stream");
+            exit(EXIT_FAILURE);
+        }
+        while(!isspace(*pp) && *pp != '\0') {
+            fprintf(fp,"%c",*pp);
+            fflush(fp);
+            pp++;
+        }
+        fclose(fp);
+        args[c] = buffer;
+        //fprintf(stderr,"Arg %d: %s\n",c,buffer);
+        c++;
+        while(isspace(*pp) && *pp != '\0') {
+            pp++;
+            if(*pp == '\0') break;
+        }
     }
-    watcher_list.length+=1;
-    return 0;
-}
-
-int del_watcher(int id) {
-    if(watcher_list.length <= 0) {
-        watcher_list.length = 0;
-        return -1;
-    }
-    else {
-        WATCHER *curr = find_watcher(id);
-        if(curr==NULL) return -1;
-        if(curr->prev != NULL) curr->prev->next = curr->next;
-        if(curr->next != NULL) curr->next->prev = curr->prev;
-        curr->wtype->stop(curr);
-    }
-    watcher_list.length-=1;
-    if(watcher_list.length==0)watcher_list.first = NULL;
-    return 0;
-}
-
-WATCHER *find_watcher(int id) {
-    WATCHER *curr = watcher_list.first;
-    while(curr->next != NULL && curr->id != id) curr = curr->next;
-    return curr;
+    args[argcount] = NULL;
+    return args;
 }
 
 void sigint_handler() {
