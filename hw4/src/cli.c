@@ -121,7 +121,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         int found = 0;
         while(watcher_types[wtype].name != NULL) {
             if((wat = strcmp(args[0],watcher_types[wtype].name))==0) {
-                fprintf(stderr,"FOUND TYPE! %d\n",wtype);
+                //fprintf(stderr,"FOUND TYPE! %d\n",wtype);
                 found = 1;
                 break;
             }
@@ -205,7 +205,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         }
     }
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        fprintf(stderr,"SHOW!\n");
+        //fprintf(stderr,"SHOW!\n");
     }
     else if(pipedinput) {
         cli_watcher_send(wp,"???\n");
@@ -223,49 +223,11 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         }
     }
     wp->serial++;
+    cli_watcher_send(wp,"ticker> ");
     return EXIT_SUCCESS;
 }
 
 int cli_watcher_trace(WATCHER *wp, int enable) {
     wp->trace = enable;
     return EXIT_SUCCESS;
-}
-
-int add_watcher(WATCHER *watcher) {
-    if(watcher_list.length == 0) {
-        watcher_list.first = watcher;
-        watcher->next = NULL;
-        watcher->prev = NULL;
-    }
-    else {
-        WATCHER *curr = watcher_list.first;
-        while(curr->next != NULL) curr = curr->next;
-        curr->next = watcher;
-        watcher->prev = curr;
-        watcher->next = NULL;
-    }
-    watcher_list.length+=1;
-    return 0;
-}
-
-int del_watcher(int id) {
-    if(watcher_list.length <= 0) {
-        watcher_list.length = 0;
-        return -1;
-    }
-    else {
-        WATCHER *curr = find_watcher(id);
-        if(curr==NULL) return -1;
-        if(curr->prev != NULL) curr->prev->next = curr->next;
-        if(curr->next != NULL) curr->next->prev = curr->prev;
-    }
-    watcher_list.length-=1;
-    if(watcher_list.length==0)watcher_list.first = NULL;
-    return 0;
-}
-
-WATCHER *find_watcher(int id) {
-    WATCHER *curr = watcher_list.first;
-    while(curr != NULL && curr->id != id) curr = curr->next;
-    return curr;
 }

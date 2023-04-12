@@ -68,9 +68,18 @@ char **parse_args(char *txt) {
     return args;
 }
 
+void sigchld_handler() {
+    fprintf(stderr,"SIGCHLD!\n");
+}
+
 void sigint_handler() {
     debug("Done");
-    fprintf(stdout,"ticker> ");
+    WATCHER *start = watcher_list.first->next;
+    while(start != NULL) {
+        waitpid(start->pid,NULL,WNOHANG);
+        start->wtype->stop(start);
+        start = start->next;
+    }
     fflush(stdout);
     exit(EXIT_SUCCESS);
 }
@@ -139,7 +148,7 @@ void handler(int signo) {
             sigint_handler();
             break;
         case SIGCHLD:
-            debug("Sigchld\n");
+            sigflag = SIGCHLD;
             break;
         case SIGIO:
             sigflag = SIGIO;
@@ -176,14 +185,54 @@ int ticker(void) {
     }
     sigio_handler(); //handle piped input
     donepiping = 1;
+    cli->wtype->send(cli,"ticker> ");
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     while(1) {
         if(sigflag == SIGIO) sigio_handler();
-        fprintf(stdout,"ticker> ");
+        if(sigflag == SIGCHLD) sigchld_handler();
         fflush(stdout);
         sigsuspend(&mask);
     }
 
 
     return 0;
+}
+
+int add_watcher(WATCHER *watcher) {
+    if(watcher_list.length == 0) {
+        watcher_list.first = watcher;
+        watcher->next = NULL;
+        watcher->prev = NULL;
+    }
+    else {
+        WATCHER *curr = watcher_list.first;
+        while(curr->next != NULL) curr = curr->next;
+        curr->next = watcher;
+        watcher->prev = curr;
+        watcher->next = NULL;
+    }
+    watcher_list.length+=1;
+    return 0;
+}
+
+int del_watcher(int id) {
+    if(watcher_list.length <= 0) {
+        watcher_list.length = 0;
+        return -1;
+    }
+    else {
+        WATCHER *curr = find_watcher(id);
+        if(curr==NULL) return -1;
+        if(curr->prev != NULL) curr->prev->next = curr->next;
+        if(curr->next != NULL) curr->next->prev = curr->prev;
+    }
+    watcher_list.length-=1;
+    if(watcher_list.length==0)watcher_list.first = NULL;
+    return 0;
+}
+
+WATCHER *find_watcher(int id) {
+    WATCHER *curr = watcher_list.first;
+    while(curr != NULL && curr->id != id) curr = curr->next;
+    return curr;
 }
