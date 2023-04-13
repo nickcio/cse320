@@ -90,12 +90,12 @@ void genio_handler() {
             fprintf(fp,"%s",temp);
             fflush(fp);
             sigio_handler_ext(fp,buffer,&bsize,valid,curr);
-            fclose(fp);
-            free(buffer);
             break;
         }
         curr = curr->next;
     }
+    fclose(fp);
+    free(buffer);
 }
 
 void sigint_handler() {
@@ -126,7 +126,8 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
             fflush(fp);
         }
         else if(nex == 0) {
-            if(bsize > 0) free(buffer);
+            fclose(fp);
+            free(buffer);
             sigint_handler();
         }
     }
@@ -152,72 +153,12 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
     pipedinput = 1;
     char temp[2] = {'\0'};
     int nex = read(STDIN_FILENO,temp,2);
-    if(nex == 0) sigint_handler();
-}
-
-void sigio_handler() {
-    debug("Signo");
-    
-    FILE *fp;
-    size_t bsize = 0;
-    char *buffer;
-    if((fp = open_memstream(&buffer,&bsize)) == NULL) {
-        perror("stream");
-        exit(EXIT_FAILURE);
-    }
-
-    char temp[1024] = {'\0'};
-    int end = read(STDIN_FILENO,temp,1024);
-    if(end == 0) {
-        free(buffer);
+    if(nex == 0) {
         fclose(fp);
+        free(buffer);
         sigint_handler();
     }
-    fprintf(fp,"%s",temp);
-    fflush(fp);
-    if(bsize == 0) donepiping = 1;
-    int total = end;
-    while(buffer[total-1] != '\n' && end != -1) {
-        memset(temp,0,1024);
-        int nex = read(STDIN_FILENO,temp,1024);
-        if(nex > 0) {
-            total += nex;
-            fprintf(fp,"%s",temp);
-            fflush(fp);
-        }
-        else if(nex == 0) {
-            free(buffer);
-            fclose(fp);
-            sigint_handler();
-        }
-    }
-    
-    char *bp = buffer;
-    while(*bp != '\0') {
-        char *zp = bp;
-        int size = 0;
-        while(*zp != '\n' && *zp != '\0') {
-            zp++;
-            size++;
-        }
-        char *seq = calloc(size+2,sizeof(char));
-        if(*zp == '\0') {
-            free(seq);
-            break;
-        }
-        memcpy(seq,bp,size+1);
-        seq[size+1] = '\0';
-        watcher_types[CLI_WATCHER_TYPE].recv(cli,seq);
-        free(seq);
-        bp = zp+1;
-    }
-    free(buffer);
-    if(!donepiping) sigint_handler();
-    sigflag = 0;
-    pipedinput = 1;
 }
-
-
 
 void handler(int signo,siginfo_t *siginfo,void* context) {
     switch(signo) {
