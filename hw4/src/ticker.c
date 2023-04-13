@@ -83,15 +83,16 @@ void genio_handler() {
     }
     WATCHER *curr = watcher_list.first;
     while(curr != NULL) {
-        char temp[1024] = {'\0'};
-        int valid = read(curr->ifd,temp,1024);
-        //fprintf(stderr,"This file: %d Input: %d",curr->ifd,valid);
+        char temp[4096] = {'\0'};
+        int valid = read(curr->ifd,temp,4096);
         if(valid != -1) {
-            if(curr->ifd == STDIN_FILENO) {
-                fprintf(fp,"%s",temp);
-                fflush(fp);
-                sigio_handler_ext(fp,buffer,&bsize,valid);
-            }
+            //fprintf(stderr,"This file: %d Input: %d\n",curr->ifd,valid);
+            fprintf(fp,"%s",temp);
+            fflush(fp);
+            sigio_handler_ext(fp,buffer,&bsize,valid,curr);
+            fclose(fp);
+            free(buffer);
+            break;
         }
         curr = curr->next;
     }
@@ -102,19 +103,22 @@ void sigint_handler() {
     while(start != NULL) {
         waitpid(start->pid,NULL,WNOHANG);
         start->wtype->stop(start);
+        WATCHER *last = start;
         start = start->next;
+        free(last);
     }
+    free(watcher_list.first);
     fflush(stdout);
     exit(EXIT_SUCCESS);
 }
 
-void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end) {
+void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp) {
     debug("Signo");
     //fprintf(stderr,"BUFFAH: %s %d\n",buffer,*bsize);
     int total = end;
-    while(buffer[total-1] != '\n' && end != -1) {
-        char temp[1024] = {'\0'};
-        int nex = read(STDIN_FILENO,temp,1024);
+    while(buffer[total-1] != '\n' && end != -1 && (strcmp(wp->wtype->name,"CLI") == 0)) {
+        char temp[4096] = {'\0'};
+        int nex = read(STDIN_FILENO,temp,4096);
         if(nex > 0) {
             total += nex;
             fprintf(fp,"%s",temp);
@@ -139,12 +143,11 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end) {
         char *seq = calloc(size+2,sizeof(char));
         memcpy(seq,bp,size+1);
         seq[size+1] = '\0';
-        watcher_types[CLI_WATCHER_TYPE].recv(cli,seq);
+        //fprintf(stderr,"BRUH! %s %s %d\n",seq,wp->wtype->name,end);
+        wp->wtype->recv(wp,seq);
         free(seq);
         bp = zp+1;
     }
-    free(buffer);
-    if(!donepiping) sigint_handler();
     sigflag = 0;
     pipedinput = 1;
 }
@@ -163,7 +166,8 @@ void sigio_handler() {
     char temp[1024] = {'\0'};
     int end = read(STDIN_FILENO,temp,1024);
     if(end == 0) {
-        if(bsize > 0) free(buffer);
+        free(buffer);
+        fclose(fp);
         sigint_handler();
     }
     fprintf(fp,"%s",temp);
@@ -179,7 +183,8 @@ void sigio_handler() {
             fflush(fp);
         }
         else if(nex == 0) {
-            if(bsize > 0) free(buffer);
+            free(buffer);
+            fclose(fp);
             sigint_handler();
         }
     }
@@ -193,8 +198,11 @@ void sigio_handler() {
             zp++;
             size++;
         }
-        if(*zp == '\0') break;
         char *seq = calloc(size+2,sizeof(char));
+        if(*zp == '\0') {
+            free(seq);
+            break;
+        }
         memcpy(seq,bp,size+1);
         seq[size+1] = '\0';
         watcher_types[CLI_WATCHER_TYPE].recv(cli,seq);

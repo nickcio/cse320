@@ -23,6 +23,6 @@ WATCHER *find_watcher(int id);
 
 void sigio_handler();
 
-void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end);
+void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp);
 
 void sigint_handler();

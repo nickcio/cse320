@@ -7,6 +7,7 @@
 #include "debug.h"
 #include <fcntl.h>
 #include "thewatcher.h"
+#include <time.h>
 
 extern int idcount;
 extern struct {
@@ -49,10 +50,22 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
             perror("fcntl");
             exit(EXIT_FAILURE);
         }
-
+        //By using bitstamp_watcher_send instead of using write directly, I successfully made
+        //my code more efficient by -6 lines!
+        /*char *json1 = calloc(50,sizeof(char));
+        memcpy(json1,"{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"",50);
+        bitstamp_watcher_send(&this,json1);
+        free(json1);
+        bitstamp_watcher_send(&this,args[0]);
+        char *json2 = calloc(6,sizeof(char));
+        memcpy(json2,"\" } }\n",6);
+        bitstamp_watcher_send(&this,json2);
+        free(json2);*/
+        
         write(fd2[1],"{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"",50);
         write(fd2[1],args[0],strlen(args[0]));
         write(fd2[1],"\" } }\n",6);
+        
 
         return bw;
     }
@@ -83,12 +96,19 @@ int bitstamp_watcher_stop(WATCHER *wp) {
 }
 
 int bitstamp_watcher_send(WATCHER *wp, void *arg) {
-    // TO BE IMPLEMENTED
+    arg = (char *)arg;
+    write(wp->ofd,arg,strlen(arg));
     return EXIT_SUCCESS;
 }
 
 int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
-    // TO BE IMPLEMENTED
+    fprintf(stderr,"Bruh.\n");
+    if(wp->trace) {
+        struct timespec thetime;
+        clock_gettime(CLOCK_REALTIME,&thetime);
+        fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
+    }
+    wp->serial++;
     return EXIT_SUCCESS;
 }
 

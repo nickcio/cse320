@@ -50,6 +50,7 @@ int cli_watcher_send(WATCHER *wp, void *arg) {
 }
 
 int cli_watcher_recv(WATCHER *wp, char *txt) {
+    wp->serial++;
     char *buffer = txt;
     if(wp->trace) {
         struct timespec thetime;
@@ -78,6 +79,12 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
     int val = -2;
     if(((val = strcmp("quit\n",buffer)) == 0) || buffer[0] == EOF) {
         cli_watcher_send(wp,"ticker> ");
+        regfree(&regstart);
+        regfree(&regstop);
+        regfree(&regtrace);
+        regfree(&reguntrace);
+        regfree(&regshow);
+        regfree(&regwatch);
         sigint_handler(); //Gracefully quits 
     }
     else if((val = regexec(&regwatch,buffer,0,NULL,0)) == 0) {
@@ -223,7 +230,12 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             donepiping = 1;
         }
     }
-    wp->serial++;
+    regfree(&regstart);
+    regfree(&regstop);
+    regfree(&regtrace);
+    regfree(&reguntrace);
+    regfree(&regshow);
+    regfree(&regwatch);
     cli_watcher_send(wp,"ticker> ");
     return EXIT_SUCCESS;
 }
