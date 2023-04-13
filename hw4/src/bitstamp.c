@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include "ticker.h"
 #include "bitstamp.h"
 #include "debug.h"
@@ -18,6 +19,7 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
     pipe(fd);
     int fd2[2];
     pipe(fd2);
+    
     int pid = -1;
     if((pid = fork()) != 0) {
         WATCHER this = {
@@ -35,29 +37,31 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
         bw->next = bw;
         bw->prev = bw;
         add_watcher(bw);
+
         close(fd[1]);
         close(fd2[0]);
+
+        if(fcntl(fd[0],F_SETOWN,getpid()) == 1) {
+            perror("fcntl");
+            exit(EXIT_FAILURE);
+        }
+        if(fcntl(fd[0],F_SETFL,O_NONBLOCK | O_ASYNC) == 1) {
+            perror("fcntl");
+            exit(EXIT_FAILURE);
+        }
+
+        write(fd2[1],"{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"",50);
+        write(fd2[1],args[0],strlen(args[0]));
+        write(fd2[1],"\" } }\n",6);
 
         return bw;
     }
     else{
-        sleep(1);
-        dup2(fd[1],STDIN_FILENO);
-        dup2(fd2[0],STDOUT_FILENO);
         close(fd[0]);
-        close(fd[1]);
-        close(fd2[0]);
         close(fd2[1]);
-
-        if(fcntl(STDIN_FILENO,F_SETOWN,getpid()) == 1) {
-            perror("fcntl");
-            exit(EXIT_FAILURE);
-        }
-        if(fcntl(STDIN_FILENO,F_SETFL,O_NONBLOCK | O_ASYNC) == 1) {
-            perror("fcntl");
-            exit(EXIT_FAILURE);
-        }
-
+        dup2(fd[1],STDOUT_FILENO);
+        dup2(fd2[0],STDIN_FILENO);
+        execvp("uwsc",type->argv);
     }
     return NULL;
 }

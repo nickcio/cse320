@@ -15,6 +15,7 @@
 volatile int sigflag = 0;
 volatile int pipedinput = 0;
 volatile int donepiping = 0;
+volatile int inputpipe = -1;
 int idcount = 0;
 
 struct {
@@ -69,11 +70,34 @@ char **parse_args(char *txt) {
 }
 
 void sigchld_handler() {
-    fprintf(stderr,"SIGCHLD!\n");
+    waitpid(-1,NULL,WNOHANG);
+}
+
+void genio_handler() {
+    FILE *fp;
+    size_t bsize = 0;
+    char *buffer;
+    if((fp = open_memstream(&buffer,&bsize)) == NULL) {
+        perror("stream");
+        exit(EXIT_FAILURE);
+    }
+    WATCHER *curr = watcher_list.first;
+    while(curr != NULL) {
+        char temp[1024] = {'\0'};
+        int valid = read(curr->ifd,temp,1024);
+        //fprintf(stderr,"This file: %d Input: %d",curr->ifd,valid);
+        if(valid != -1) {
+            if(curr->ifd == STDIN_FILENO) {
+                fprintf(fp,"%s",temp);
+                fflush(fp);
+                sigio_handler_ext(fp,buffer,&bsize,valid);
+            }
+        }
+        curr = curr->next;
+    }
 }
 
 void sigint_handler() {
-    debug("Done");
     WATCHER *start = watcher_list.first->next;
     while(start != NULL) {
         waitpid(start->pid,NULL,WNOHANG);
@@ -84,12 +108,53 @@ void sigint_handler() {
     exit(EXIT_SUCCESS);
 }
 
+void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end) {
+    debug("Signo");
+    //fprintf(stderr,"BUFFAH: %s %d\n",buffer,*bsize);
+    int total = end;
+    while(buffer[total-1] != '\n' && end != -1) {
+        char temp[1024] = {'\0'};
+        int nex = read(STDIN_FILENO,temp,1024);
+        if(nex > 0) {
+            total += nex;
+            fprintf(fp,"%s",temp);
+            fflush(fp);
+        }
+        else if(nex == 0) {
+            if(bsize > 0) free(buffer);
+            sigint_handler();
+        }
+    }
+
+    
+    char *bp = buffer;
+    while(*bp != '\0') {
+        char *zp = bp;
+        int size = 0;
+        while(*zp != '\n' && *zp != '\0') {
+            zp++;
+            size++;
+        }
+        if(*zp == '\0') break;
+        char *seq = calloc(size+2,sizeof(char));
+        memcpy(seq,bp,size+1);
+        seq[size+1] = '\0';
+        watcher_types[CLI_WATCHER_TYPE].recv(cli,seq);
+        free(seq);
+        bp = zp+1;
+    }
+    free(buffer);
+    if(!donepiping) sigint_handler();
+    sigflag = 0;
+    pipedinput = 1;
+}
+
 void sigio_handler() {
     debug("Signo");
+    
     FILE *fp;
     size_t bsize = 0;
     char *buffer;
-    
     if((fp = open_memstream(&buffer,&bsize)) == NULL) {
         perror("stream");
         exit(EXIT_FAILURE);
@@ -142,16 +207,19 @@ void sigio_handler() {
     pipedinput = 1;
 }
 
-void handler(int signo) {
+
+
+void handler(int signo,siginfo_t *siginfo,void* context) {
     switch(signo) {
+        case SIGIO:
+            sigflag = SIGIO;
+            inputpipe = siginfo->si_fd;
+            break;
         case SIGINT:
             sigint_handler();
             break;
         case SIGCHLD:
             sigflag = SIGCHLD;
-            break;
-        case SIGIO:
-            sigflag = SIGIO;
             break;
         default:
             sigflag = 0;
@@ -162,13 +230,29 @@ void handler(int signo) {
 int ticker(void) {
     cli = watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE],NULL);
     sigflag = 0;
-    struct sigaction newaction = {0};
-    newaction.sa_handler = handler;
-    sigemptyset(&newaction.sa_mask);
-    newaction.sa_flags = 0;
-    sigaction(SIGINT,&newaction,NULL);
-    sigaction(SIGIO,&newaction,NULL);
-    sigaction(SIGCHLD,&newaction,NULL);
+    //struct sigaction newaction = {0};
+    struct sigaction asigio;
+    memset(&asigio, 0x00, sizeof(asigio));
+    sigemptyset(&asigio.sa_mask);
+    asigio.sa_sigaction = handler;
+    asigio.sa_flags = SA_SIGINFO;
+
+    struct sigaction asigint;
+    memset(&asigint, 0x00, sizeof(asigint));
+    sigemptyset(&asigint.sa_mask);
+    asigint.sa_sigaction = handler;
+    asigint.sa_flags = SA_SIGINFO;
+
+    struct sigaction asigchld;
+    memset(&asigchld, 0x00, sizeof(asigchld));
+    sigemptyset(&asigchld.sa_mask);
+    asigchld.sa_sigaction = handler;
+    asigchld.sa_flags = SA_SIGINFO;
+
+    sigaction(SIGIO,&asigio,NULL);
+    sigaction(SIGINT,&asigint,NULL);
+    sigaction(SIGCHLD,&asigchld,NULL);
+    
     sigset_t mask;
     sigfillset(&mask);
     sigdelset(&mask,SIGINT);
@@ -188,7 +272,9 @@ int ticker(void) {
     cli->wtype->send(cli,"ticker> ");
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
     while(1) {
-        if(sigflag == SIGIO) sigio_handler();
+        if(sigflag == SIGIO) {
+            genio_handler();
+        }
         if(sigflag == SIGCHLD) sigchld_handler();
         fflush(stdout);
         sigsuspend(&mask);

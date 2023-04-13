@@ -132,7 +132,8 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             else{
                 char **inargs = args+1;
                 if(*inargs == NULL) inargs = NULL;
-                watcher_types[wtype].start(&watcher_types[wtype],inargs);
+                if(inargs == NULL && wtype == BITSTAMP_WATCHER_TYPE) cli_watcher_send(wp,"???\n");
+                else watcher_types[wtype].start(&watcher_types[wtype],inargs);
             }
         }
         else {
