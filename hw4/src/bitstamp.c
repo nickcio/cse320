@@ -9,6 +9,7 @@
 #include "thewatcher.h"
 #include <time.h>
 #include "argo.h"
+#include "store.h"
 
 extern int idcount;
 extern struct {
@@ -115,18 +116,55 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
         char *buffer;
         if((fp = open_memstream(&buffer,&bsize)) == NULL) {
             perror("stream");
-            //exit(EXIT_FAILURE);
         }
-        fprintf(fp,"%s",txt+18);
+        fprintf(fp,"%s",txt+19);
         fflush(fp);
-        fprintf(stderr,"THIS SHIT! %s\n",txt+18);
-        ARGO_VALUE *data = argo_read_value(fp);
-        fprintf(stderr,"argo true: %d\n",argo_value_is_true(data));
-        fprintf(stderr,"argo null: %d\n",argo_value_is_null(data));
-        fprintf(stderr,"argo false: %d\n",argo_value_is_false(data));
-        ARGO_VALUE *argid = argo_value_get_member(data,"id");
-        long idnum = 0;
-        fprintf(stderr,"argo id: %d\n",argo_value_get_long(argid,&idnum));
+        buffer[bsize-1]='\0';
+        fprintf(stderr,"THIS SHIT! %s\n",txt+19);
+        ARGO_VALUE *jsonf = argo_read_value(fp);
+        fclose(fp);
+        free(buffer);
+
+        ARGO_VALUE *data = argo_value_get_member(jsonf,"data");
+        ARGO_VALUE *argpri = argo_value_get_member(data,"price");
+        FILE *fp2;
+        size_t bsize2 = 0;
+        char *buffer2;
+        if((fp2 = open_memstream(&buffer2,&bsize2)) == NULL) {
+            perror("stream");
+        }
+        fprintf(fp2,"%s:%s:price",wp->wtype->name,wp->args[0]);
+        double pri;
+        argo_value_get_double(argpri,&pri);
+        struct store_value price;
+        price.type = STORE_DOUBLE_TYPE;
+        price.content.double_value = pri;
+        fclose(fp2);
+        store_put(buffer2,&price);
+        free(buffer2);
+
+        ARGO_VALUE *argamt = argo_value_get_member(data,"amount");
+        FILE *fp3;
+        size_t bsize3 = 0;
+        char *buffer3;
+        if((fp3 = open_memstream(&buffer3,&bsize3)) == NULL) {
+            perror("stream");
+        }
+        fprintf(fp3,"%s:%s:amount",wp->wtype->name,wp->args[0]);
+        double amt;
+        argo_value_get_double(argamt,&amt);
+        fclose(fp3);
+        struct store_value *amount = store_get(buffer3);
+        if(amount == NULL) {
+            struct store_value new;
+            new.type = STORE_DOUBLE_TYPE;
+            new.content.double_value = 0.0;
+            amount = &new;
+        }
+        amount->content.double_value+=amt;
+        store_put(buffer3,amount);
+        free(buffer3);
+
     }
     return EXIT_SUCCESS;
 }
