@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include "thewatcher.h"
 #include <time.h>
+#include "argo.h"
 
 extern int idcount;
 extern struct {
@@ -44,11 +45,11 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
 
         if(fcntl(fd[0],F_SETOWN,getpid()) == 1) {
             perror("fcntl");
-            exit(EXIT_FAILURE);
+            //exit(EXIT_FAILURE);
         }
         if(fcntl(fd[0],F_SETFL,O_NONBLOCK | O_ASYNC) == 1) {
             perror("fcntl");
-            exit(EXIT_FAILURE);
+            //exit(EXIT_FAILURE);
         }
         //By using bitstamp_watcher_send instead of using write directly, I successfully made
         //my code more efficient by -6 lines!
@@ -107,6 +108,25 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
         struct timespec thetime;
         clock_gettime(CLOCK_REALTIME,&thetime);
         fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
+    }
+    if(wp->serial > 4) {
+        FILE *fp;
+        size_t bsize = 0;
+        char *buffer;
+        if((fp = open_memstream(&buffer,&bsize)) == NULL) {
+            perror("stream");
+            //exit(EXIT_FAILURE);
+        }
+        fprintf(fp,"%s",txt+18);
+        fflush(fp);
+        fprintf(stderr,"THIS SHIT! %s\n",txt+18);
+        ARGO_VALUE *data = argo_read_value(fp);
+        fprintf(stderr,"argo true: %d\n",argo_value_is_true(data));
+        fprintf(stderr,"argo null: %d\n",argo_value_is_null(data));
+        fprintf(stderr,"argo false: %d\n",argo_value_is_false(data));
+        ARGO_VALUE *argid = argo_value_get_member(data,"id");
+        long idnum = 0;
+        fprintf(stderr,"argo id: %d\n",argo_value_get_long(argid,&idnum));
     }
     return EXIT_SUCCESS;
 }
