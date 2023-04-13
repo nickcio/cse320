@@ -10,6 +10,8 @@
 #include <time.h>
 #include "argo.h"
 #include "store.h"
+#include <signal.h>
+#include <sys/wait.h>
 
 extern int idcount;
 extern struct {
@@ -83,6 +85,8 @@ int bitstamp_watcher_stop(WATCHER *wp) {
         free(start[-1]);
         free(start-1);
     }
+    kill(wp->pid,SIGTERM);
+    waitpid(wp->pid,NULL,WNOHANG);
     return EXIT_SUCCESS;
 }
 

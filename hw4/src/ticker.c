@@ -101,7 +101,6 @@ void genio_handler() {
 void sigint_handler() {
     WATCHER *start = watcher_list.first->next;
     while(start != NULL) {
-        waitpid(start->pid,NULL,WNOHANG);
         start->wtype->stop(start);
         WATCHER *last = start;
         start = start->next;
