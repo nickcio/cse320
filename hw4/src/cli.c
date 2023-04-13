@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include "store.h"
 
 extern int idcount;
 extern int pipedinput;
@@ -73,7 +74,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
     regerr = regcomp(&reguntrace,"^untrace(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
     regex_t regshow;
-    regerr = regcomp(&regshow,"^show(\\s)+[0-9]+(\\s)*\n$",REG_EXTENDED);
+    regerr = regcomp(&regshow,"^show(\\s)+(\\S+)(\\s)*\n$",REG_EXTENDED);
     if(regerr) sigint_handler();
 
     int val = -2;
@@ -213,7 +214,12 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         }
     }
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        //fprintf(stderr,"SHOW!\n");
+        char* arg = parse_args(buffer+5)[0];
+        struct store_value *val = store_get(arg);
+        if(val == NULL) cli_watcher_send(wp,"???\n");
+        else {
+            dprintf(wp->ofd,"%s\t%lf\n",arg,val->content.double_value);
+        }
     }
     else {
         cli_watcher_send(wp,"???\n");

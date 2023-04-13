@@ -52,17 +52,6 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
             perror("fcntl");
             //exit(EXIT_FAILURE);
         }
-        //By using bitstamp_watcher_send instead of using write directly, I successfully made
-        //my code more efficient by -6 lines!
-        /*char *json1 = calloc(50,sizeof(char));
-        memcpy(json1,"{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"",50);
-        bitstamp_watcher_send(&this,json1);
-        free(json1);
-        bitstamp_watcher_send(&this,args[0]);
-        char *json2 = calloc(6,sizeof(char));
-        memcpy(json2,"\" } }\n",6);
-        bitstamp_watcher_send(&this,json2);
-        free(json2);*/
         
         write(fd2[1],"{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"",50);
         write(fd2[1],args[0],strlen(args[0]));
@@ -105,22 +94,30 @@ int bitstamp_watcher_send(WATCHER *wp, void *arg) {
 
 int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
     wp->serial++;
+    if(wp->serial > 4) {
+        char *start = txt;
+        while(*start != 'S' && *start != '\0') start++;
+        txt = start;
+    }
     if(wp->trace) {
         struct timespec thetime;
         clock_gettime(CLOCK_REALTIME,&thetime);
         fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
     }
     if(wp->serial > 4) {
+        char *start = txt;
+        while(*start != '{' && *start != '\0') start++;
+        txt = start;
+
         FILE *fp;
         size_t bsize = 0;
         char *buffer;
         if((fp = open_memstream(&buffer,&bsize)) == NULL) {
             perror("stream");
         }
-        fprintf(fp,"%s",txt+19);
+        fprintf(fp,"%s",txt);
         fflush(fp);
         buffer[bsize-1]='\0';
-        fprintf(stderr,"THIS SHIT! %s\n",txt+19);
         ARGO_VALUE *jsonf = argo_read_value(fp);
         fclose(fp);
         free(buffer);
@@ -154,16 +151,31 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
         double amt;
         argo_value_get_double(argamt,&amt);
         fclose(fp3);
-        struct store_value *amount = store_get(buffer3);
-        if(amount == NULL) {
+        struct store_value amount;
+        amount.type = STORE_DOUBLE_TYPE;
+        amount.content.double_value = amt;
+        store_put(buffer3,&amount);
+        free(buffer3);
+
+        FILE *fp4;
+        size_t bsize4 = 0;
+        char *buffer4;
+        if((fp4 = open_memstream(&buffer4,&bsize4)) == NULL) {
+            perror("stream");
+        }
+        fprintf(fp4,"%s:%s:volume",wp->wtype->name,wp->args[0]);
+        fclose(fp4);
+        struct store_value *volume = store_get(buffer4);
+        if(volume == NULL) {
             struct store_value new;
             new.type = STORE_DOUBLE_TYPE;
             new.content.double_value = 0.0;
-            amount = &new;
+            volume = &new;
         }
-        amount->content.double_value+=amt;
-        store_put(buffer3,amount);
-        free(buffer3);
+        volume->content.double_value+=amt;
+        store_put(buffer4,volume);
+        free(buffer4);
+
 
     }
     return EXIT_SUCCESS;
