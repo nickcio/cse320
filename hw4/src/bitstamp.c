@@ -102,13 +102,12 @@ int bitstamp_watcher_send(WATCHER *wp, void *arg) {
 }
 
 int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
-    fprintf(stderr,"Bruh.\n");
+    wp->serial++;
     if(wp->trace) {
         struct timespec thetime;
         clock_gettime(CLOCK_REALTIME,&thetime);
         fprintf(stderr,"[%ld.%.6ld][%-10s][%2d][%5d]: %s\n",thetime.tv_sec,thetime.tv_nsec/1000,wp->wtype->name,wp->ifd,wp->serial,txt);
     }
-    wp->serial++;
     return EXIT_SUCCESS;
 }
 

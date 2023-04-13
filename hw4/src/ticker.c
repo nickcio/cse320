@@ -115,6 +115,7 @@ void sigint_handler() {
 void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp) {
     debug("Signo");
     //fprintf(stderr,"BUFFAH: %s %d\n",buffer,*bsize);
+    if(bsize == 0) donepiping = 1;
     int total = end;
     while(buffer[total-1] != '\n' && end != -1 && (strcmp(wp->wtype->name,"CLI") == 0)) {
         char temp[4096] = {'\0'};
@@ -129,7 +130,6 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
             sigint_handler();
         }
     }
-
     
     char *bp = buffer;
     while(*bp != '\0') {
@@ -150,6 +150,9 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
     }
     sigflag = 0;
     pipedinput = 1;
+    char temp[2] = {'\0'};
+    int nex = read(STDIN_FILENO,temp,2);
+    if(nex == 0) sigint_handler();
 }
 
 void sigio_handler() {
@@ -188,7 +191,6 @@ void sigio_handler() {
             sigint_handler();
         }
     }
-
     
     char *bp = buffer;
     while(*bp != '\0') {
@@ -275,14 +277,16 @@ int ticker(void) {
         perror("fcntl");
         exit(EXIT_FAILURE);
     }
-    sigio_handler(); //handle piped input
-    donepiping = 1;
-    cli->wtype->send(cli,"ticker> ");
+    //sigio_handler(); //handle piped input
+    
     sigprocmask(SIG_UNBLOCK,&mask,NULL);
+    raise(SIGIO);
     while(1) {
         if(sigflag == SIGIO) {
             genio_handler();
+            if(!donepiping) fprintf(stdout,"ticker> ");
         }
+        donepiping = 1;
         if(sigflag == SIGCHLD) sigchld_handler();
         fflush(stdout);
         sigsuspend(&mask);

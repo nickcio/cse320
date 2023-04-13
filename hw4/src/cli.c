@@ -215,11 +215,8 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
         //fprintf(stderr,"SHOW!\n");
     }
-    else if(pipedinput) {
+    else {
         cli_watcher_send(wp,"???\n");
-    }
-    else if(!pipedinput) {
-        if(strlen(buffer) != 0) cli_watcher_send(wp,"ticker> ???\n");
     }
     if(!pipedinput) {
         //pipedinput = 1;
