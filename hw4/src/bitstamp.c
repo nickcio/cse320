@@ -176,10 +176,6 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
         store_put(buffer4,volume);
         free(buffer4);
 
-        argo_free_value(jsonf);
-        argo_free_value(data);
-        argo_free_value(argpri);
-        argo_free_value(argamt);
 
     }
     return EXIT_SUCCESS;
