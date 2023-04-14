@@ -125,61 +125,76 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
         ARGO_VALUE *jsonf = argo_read_value(fp);
         fclose(fp);
         free(buffer);
+        if(jsonf != NULL) {
+            ARGO_VALUE *data = argo_value_get_member(jsonf,"data");
+            if(data != NULL) {
+                ARGO_VALUE *event = argo_value_get_member(jsonf,"event");
+                char *event_trade = NULL;
+                if(event != NULL) {
+                    event_trade = argo_value_get_chars(event);
+                }
+                if(event_trade != NULL && strcmp(event_trade,"trade") == 0) {
+                    ARGO_VALUE *argpri = argo_value_get_member(data,"price");
+                    if(argpri != NULL) {
+                        FILE *fp2;
+                        size_t bsize2 = 0;
+                        char *buffer2;
+                        if((fp2 = open_memstream(&buffer2,&bsize2)) == NULL) {
+                            perror("stream");
+                        }
+                        fprintf(fp2,"%s:%s:price",wp->wtype->name,wp->args[0]);
+                        double pri;
+                        argo_value_get_double(argpri,&pri);
+                        struct store_value price;
+                        price.type = STORE_DOUBLE_TYPE;
+                        price.content.double_value = pri;
+                        fclose(fp2);
+                        store_put(buffer2,&price);
+                        free(buffer2);
+                    }
 
-        ARGO_VALUE *data = argo_value_get_member(jsonf,"data");
-        ARGO_VALUE *argpri = argo_value_get_member(data,"price");
-        FILE *fp2;
-        size_t bsize2 = 0;
-        char *buffer2;
-        if((fp2 = open_memstream(&buffer2,&bsize2)) == NULL) {
-            perror("stream");
-        }
-        fprintf(fp2,"%s:%s:price",wp->wtype->name,wp->args[0]);
-        double pri;
-        argo_value_get_double(argpri,&pri);
-        struct store_value price;
-        price.type = STORE_DOUBLE_TYPE;
-        price.content.double_value = pri;
-        fclose(fp2);
-        store_put(buffer2,&price);
-        free(buffer2);
+                    ARGO_VALUE *argamt = argo_value_get_member(data,"amount");
+                    if(argamt != NULL) {
+                        FILE *fp3;
+                        size_t bsize3 = 0;
+                        char *buffer3;
+                        if((fp3 = open_memstream(&buffer3,&bsize3)) == NULL) {
+                            perror("stream");
+                        }
+                        fprintf(fp3,"%s:%s:amount",wp->wtype->name,wp->args[0]);
+                        double amt;
+                        argo_value_get_double(argamt,&amt);
+                        fclose(fp3);
+                        struct store_value amount;
+                        amount.type = STORE_DOUBLE_TYPE;
+                        amount.content.double_value = amt;
+                        store_put(buffer3,&amount);
+                        free(buffer3);
 
-        ARGO_VALUE *argamt = argo_value_get_member(data,"amount");
-        FILE *fp3;
-        size_t bsize3 = 0;
-        char *buffer3;
-        if((fp3 = open_memstream(&buffer3,&bsize3)) == NULL) {
-            perror("stream");
+                        FILE *fp4;
+                        size_t bsize4 = 0;
+                        char *buffer4;
+                        if((fp4 = open_memstream(&buffer4,&bsize4)) == NULL) {
+                            perror("stream");
+                        }
+                        fprintf(fp4,"%s:%s:volume",wp->wtype->name,wp->args[0]);
+                        fclose(fp4);
+                        struct store_value *volume = store_get(buffer4);
+                        if(volume == NULL) {
+                            struct store_value new;
+                            new.type = STORE_DOUBLE_TYPE;
+                            new.content.double_value = 0.0;
+                            volume = &new;
+                        }
+                        volume->content.double_value+=amt;
+                        store_put(buffer4,volume);
+                        free(buffer4);
+                    }
+                }
+                if(event_trade != NULL) free(event_trade);
+            }
+            argo_free_value(jsonf);
         }
-        fprintf(fp3,"%s:%s:amount",wp->wtype->name,wp->args[0]);
-        double amt;
-        argo_value_get_double(argamt,&amt);
-        fclose(fp3);
-        struct store_value amount;
-        amount.type = STORE_DOUBLE_TYPE;
-        amount.content.double_value = amt;
-        store_put(buffer3,&amount);
-        free(buffer3);
-
-        FILE *fp4;
-        size_t bsize4 = 0;
-        char *buffer4;
-        if((fp4 = open_memstream(&buffer4,&bsize4)) == NULL) {
-            perror("stream");
-        }
-        fprintf(fp4,"%s:%s:volume",wp->wtype->name,wp->args[0]);
-        fclose(fp4);
-        struct store_value *volume = store_get(buffer4);
-        if(volume == NULL) {
-            struct store_value new;
-            new.type = STORE_DOUBLE_TYPE;
-            new.content.double_value = 0.0;
-            volume = &new;
-        }
-        volume->content.double_value+=amt;
-        store_put(buffer4,volume);
-        free(buffer4);
-
 
     }
     return EXIT_SUCCESS;

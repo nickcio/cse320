@@ -112,7 +112,6 @@ void sigint_handler() {
 }
 
 void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp) {
-    debug("Signo");
     //fprintf(stderr,"BUFFAH: %s %d\n",buffer,*bsize);
     if(bsize == 0) donepiping = 1;
     int total = end;
