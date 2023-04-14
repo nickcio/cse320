@@ -99,14 +99,14 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
                 int i = 0;
                 char *carg = argv[0];
                 while(carg != NULL) {
-                    dprintf(wp->ofd,"%s ",carg);
+                    dprintf(wp->ofd,"%s",carg);
                     i++;
                     carg = argv[i];
                 }
             }
             char **args = curr->args;
             if(args != NULL) {
-                dprintf(wp->ofd,"[");
+                dprintf(wp->ofd," [");
                 int i = 0;
                 char *carg = args[0];
                 while(carg != NULL) {
