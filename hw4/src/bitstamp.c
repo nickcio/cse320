@@ -41,6 +41,7 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
         *bw = this;
         bw->next = bw;
         bw->prev = bw;
+        bw->self = bw;
         add_watcher(bw);
 
         close(fd[1]);
@@ -82,9 +83,9 @@ int bitstamp_watcher_stop(WATCHER *wp) {
             free(*args);
             args++;
         }
-        free(start[-1]);
-        free(start-1);
+        free(start);
     }
+    free(wp->self);
     kill(wp->pid,SIGTERM);
     waitpid(wp->pid,NULL,WNOHANG);
     return EXIT_SUCCESS;
@@ -180,7 +181,9 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
                         fprintf(fp4,"%s:%s:volume",wp->wtype->name,wp->args[0]);
                         fclose(fp4);
                         struct store_value *volume = store_get(buffer4);
+                        int wasnull = 0;
                         if(volume == NULL) {
+                            wasnull = 1;
                             struct store_value new;
                             new.type = STORE_DOUBLE_TYPE;
                             new.content.double_value = 0.0;
@@ -188,13 +191,16 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
                         }
                         volume->content.double_value+=amt;
                         store_put(buffer4,volume);
+                        if(!wasnull) store_free_value(volume);
                         free(buffer4);
                     }
                 }
                 if(event_trade != NULL) free(event_trade);
             }
             argo_free_value(jsonf);
+            jsonf = NULL;
         }
+        if(jsonf != NULL) argo_free_value(jsonf);
 
     }
     return EXIT_SUCCESS;

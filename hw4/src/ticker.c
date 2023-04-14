@@ -25,7 +25,7 @@ struct {
 
 WATCHER *cli = NULL;
 
-char **parse_args(char *txt) {
+char **parse_args(char *txt,int skip) {
     if(txt == NULL) return NULL;
     //fprintf(stderr,"Txt: %s\n",txt);
     char *start = txt;
@@ -40,7 +40,7 @@ char **parse_args(char *txt) {
         else lastspace = 0;
         pc++;
     }
-    char **args = malloc(sizeof(char *)*(argcount + 1));
+    char **args = calloc((argcount + 1 - skip),sizeof(char *));
     int c = 0;
     char *pp = start;
     while(c < argcount) {
@@ -57,7 +57,10 @@ char **parse_args(char *txt) {
             pp++;
         }
         fclose(fp);
-        args[c] = buffer;
+        if(c >= skip) {
+            args[c-skip] = buffer;
+        }
+        else free(buffer);
         //fprintf(stderr,"Arg %d: %s\n",c,buffer);
         c++;
         while(isspace(*pp) && *pp != '\0') {
@@ -65,7 +68,7 @@ char **parse_args(char *txt) {
             if(*pp == '\0') break;
         }
     }
-    args[argcount] = NULL;
+    args[argcount-skip] = NULL;
     return args;
 }
 
@@ -102,9 +105,7 @@ void sigint_handler() {
     WATCHER *start = watcher_list.first->next;
     while(start != NULL) {
         start->wtype->stop(start);
-        WATCHER *last = start;
-        start = start->next;
-        free(last);
+        start = watcher_list.first->next;
     }
     free(watcher_list.first);
     fflush(stdout);
