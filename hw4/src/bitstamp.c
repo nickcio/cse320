@@ -85,9 +85,9 @@ int bitstamp_watcher_stop(WATCHER *wp) {
         }
         free(start);
     }
-    free(wp->self);
     kill(wp->pid,SIGTERM);
     waitpid(wp->pid,NULL,WNOHANG);
+    free(wp);
     return EXIT_SUCCESS;
 }
 
@@ -156,21 +156,14 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 
                     ARGO_VALUE *argamt = argo_value_get_member(data,"amount");
                     if(argamt != NULL) {
-                        FILE *fp3;
-                        size_t bsize3 = 0;
-                        char *buffer3;
-                        if((fp3 = open_memstream(&buffer3,&bsize3)) == NULL) {
-                            perror("stream");
-                        }
-                        fprintf(fp3,"%s:%s:amount",wp->wtype->name,wp->args[0]);
                         double amt;
                         argo_value_get_double(argamt,&amt);
-                        fclose(fp3);
-                        struct store_value amount;
-                        amount.type = STORE_DOUBLE_TYPE;
-                        amount.content.double_value = amt;
-                        store_put(buffer3,&amount);
-                        free(buffer3);
+                        //fclose(fp3);
+                        //struct store_value amount;
+                        //amount.type = STORE_DOUBLE_TYPE;
+                        //amount.content.double_value = amt;
+                        //store_put(buffer3,&amount);
+                        //free(buffer3);
 
                         FILE *fp4;
                         size_t bsize4 = 0;

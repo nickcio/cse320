@@ -260,6 +260,7 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             dprintf(wp->ofd,"%s\t%lf\n",arg,val->content.double_value);
             store_free_value(val);
         }
+        else cli_watcher_send(wp,"???\n");
         char **start = args;
         while(start != NULL && *start != NULL) {
             if(*start != NULL) free(*start);

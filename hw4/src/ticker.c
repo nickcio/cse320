@@ -92,7 +92,12 @@ void genio_handler() {
             //fprintf(stderr,"This file: %d Input: %d\n",curr->ifd,valid);
             fprintf(fp,"%s",temp);
             fflush(fp);
-            sigio_handler_ext(fp,buffer,&bsize,valid,curr);
+            int done = sigio_handler_ext(fp,buffer,&bsize,valid,curr);
+            if(done) {
+                fclose(fp);
+                free(buffer);
+                sigint_handler();
+            }
             break;
         }
         curr = curr->next;
@@ -112,7 +117,7 @@ void sigint_handler() {
     exit(EXIT_SUCCESS);
 }
 
-void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp) {
+int sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp) {
     //fprintf(stderr,"BUFFAH: %s %d\n",buffer,*bsize);
     if(bsize == 0) donepiping = 1;
     int total = end;
@@ -125,9 +130,7 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
             fflush(fp);
         }
         else if(nex == 0) {
-            fclose(fp);
-            free(buffer);
-            sigint_handler();
+            return 1;
         }
     }
     
@@ -153,10 +156,9 @@ void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp)
     char temp[2] = {'\0'};
     int nex = read(STDIN_FILENO,temp,2);
     if(nex == 0) {
-        fclose(fp);
-        free(buffer);
-        sigint_handler();
+        return 1;
     }
+    return 0;
 }
 
 void handler(int signo,siginfo_t *siginfo,void* context) {

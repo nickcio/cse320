@@ -24,6 +24,6 @@ WATCHER *find_watcher(int id);
 
 void genio_handler();
 
-void sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp);
+int sigio_handler_ext(FILE *fp, char *buffer,size_t *bsize,int end,WATCHER *wp);
 
 void sigint_handler();
