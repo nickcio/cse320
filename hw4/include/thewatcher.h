@@ -13,7 +13,7 @@ typedef struct watcher {
     char **args; //additional args
 } WATCHER;
 
-char **parse_args(char *txt); //parses args, allocates data
+char **parse_args(char *txt,int skip); //parses args, allocates data
 
 int add_watcher(WATCHER *watcher); //Add by pointer
 
