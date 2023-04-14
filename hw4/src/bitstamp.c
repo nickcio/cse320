@@ -41,6 +41,7 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
         *bw = this;
         bw->next = bw;
         bw->prev = bw;
+        bw->self = bw;
         add_watcher(bw);
 
         close(fd[1]);
@@ -84,6 +85,7 @@ int bitstamp_watcher_stop(WATCHER *wp) {
         }
         free(start);
     }
+    free(wp->self);
     kill(wp->pid,SIGTERM);
     waitpid(wp->pid,NULL,WNOHANG);
     return EXIT_SUCCESS;
@@ -196,7 +198,9 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
                 if(event_trade != NULL) free(event_trade);
             }
             argo_free_value(jsonf);
+            jsonf = NULL;
         }
+        if(jsonf != NULL) argo_free_value(jsonf);
 
     }
     return EXIT_SUCCESS;

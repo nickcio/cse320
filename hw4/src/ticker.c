@@ -105,9 +105,7 @@ void sigint_handler() {
     WATCHER *start = watcher_list.first->next;
     while(start != NULL) {
         start->wtype->stop(start);
-        WATCHER *last = start;
-        start = start->next;
-        free(last);
+        start = watcher_list.first->next;
     }
     free(watcher_list.first);
     fflush(stdout);

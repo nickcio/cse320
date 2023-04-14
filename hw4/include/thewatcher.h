@@ -11,6 +11,7 @@ typedef struct watcher {
     int trace;
     int serial;
     char **args; //additional args
+    WATCHER *self;
 } WATCHER;
 
 char **parse_args(char *txt,int skip); //parses args, allocates data

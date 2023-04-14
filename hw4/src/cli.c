@@ -34,6 +34,7 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
     *cliw = this;
     cliw->next = cliw;
     cliw->prev = cliw;
+    cliw->self = cliw;
     add_watcher(cliw);
     return cliw;
 }
@@ -150,7 +151,10 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             else{
                 char **args2 = parse_args(buffer+5,1);
                 char **inargs = args2;
-                if(*inargs == NULL) inargs = NULL;
+                if(*inargs == NULL) {
+                    free(args2);
+                    inargs = NULL;
+                }
                 if(inargs == NULL && wtype == BITSTAMP_WATCHER_TYPE) {
                     dprintf(wp->ofd,"%s: requires channel name as argument\n",watcher_types[wtype].name);
                     cli_watcher_send(wp,"???\n");
@@ -163,7 +167,8 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
         }
     }
     else if((val = regexec(&regstop,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        char* arg = parse_args(buffer+5,0)[0];
+        char** args = parse_args(buffer+5,0);
+        char* arg = args[0];
         int idnum = 0;
         int valid = 1;
         while(*arg != '\0' && *arg != '\n') {
@@ -184,10 +189,17 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             }
             else cli_watcher_send(wp,"???\n");
         }
+        char **start = args;
+        while(start != NULL && *start != NULL) {
+            if(*start != NULL) free(*start);
+            start++;
+        }
+        free(args);
     }
     else if((val = regexec(&regtrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         //get ID
-        char* arg = parse_args(buffer+5,0)[0];
+        char** args = parse_args(buffer+5,0);
+        char* arg = args[0];
         int idnum = 0;
         int valid = 1;
         while(*arg != '\0') {
@@ -205,10 +217,17 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             if(this != NULL) this->wtype->trace(this,1);
             else cli_watcher_send(wp,"???\n");
         }
+        char **start = args;
+        while(start != NULL && *start != NULL) {
+            if(*start != NULL) free(*start);
+            start++;
+        }
+        free(args);
     }
     else if((val = regexec(&reguntrace,buffer,0,NULL,0)) == 0) { //takes 1 arg
         //get ID
-        char* arg = parse_args(buffer+7,0)[0];
+        char** args = parse_args(buffer+7,0);
+        char* arg = args[0];
         int idnum = 0;
         int valid = 1;
         while(*arg != '\0') {
@@ -226,14 +245,27 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
             if(this != NULL) this->wtype->trace(this,0);
             else cli_watcher_send(wp,"???\n");
         }
+        char **start = args;
+        while(start != NULL && *start != NULL) {
+            if(*start != NULL) free(*start);
+            start++;
+        }
+        free(args);
     }
     else if((val = regexec(&regshow,buffer,0,NULL,0)) == 0) { //takes 1 arg
-        char* arg = parse_args(buffer+5,0)[0];
+        char** args = parse_args(buffer+5,0);
+        char* arg = args[0];
         struct store_value *val = store_get(arg);
         if(val != NULL) {
             dprintf(wp->ofd,"%s\t%lf\n",arg,val->content.double_value);
             store_free_value(val);
         }
+        char **start = args;
+        while(start != NULL && *start != NULL) {
+            if(*start != NULL) free(*start);
+            start++;
+        }
+        free(args);
     }
     else if(donepiping) {
         cli_watcher_send(wp,"???\n");
