@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <getopt.h>
 
+#include "csapp.h"
 #include "debug.h"
 #include "protocol.h"
 #include "server.h"
@@ -21,7 +23,9 @@ int _debug_packets_ = 1;
 #endif
 
 static void terminate(int status);
+void *thread(void *vargp);
 
+static void sighup_handler();
 /*
  * "Jeux" game server.
  *
@@ -31,6 +35,32 @@ int main(int argc, char* argv[]){
     // Option processing should be performed here.
     // Option '-p <port>' is required in order to specify the port number
     // on which the server should listen.
+    if(argc != 3) {
+        exit(EXIT_FAILURE);
+    }
+    int opt;
+    char *port = NULL;
+    while((opt = getopt(argc,argv,"p:")) != -1) {
+        switch(opt){
+            case 'p':
+                //int pnum = 0;
+                char *op = optarg;
+                while(*op != '\0') {
+                    if(!isdigit(*op)) {
+                        debug("Invalid port.");
+                        exit(EXIT_FAILURE);
+                    }
+                    op++;
+                }
+                debug("Valid port. optarg %s",optarg);
+                port = optarg;
+                break;
+            default:
+                debug("Invalid input.");
+                exit(EXIT_FAILURE);
+                break;
+        }
+    }
 
     // Perform required initializations of the client_registry and
     // player_registry.
@@ -42,9 +72,31 @@ int main(int argc, char* argv[]){
     // run function jeux_client_service().  In addition, you should install
     // a SIGHUP handler, so that receipt of SIGHUP will perform a clean
     // shutdown of the server.
+    struct sigaction asighup;
+    memset(&asighup, 0x00, sizeof(asighup));
+    sigemptyset(&asighup.sa_mask);
+    asighup.sa_sigaction = sighup_handler;
+    asighup.sa_flags = SA_SIGINFO;
 
-    fprintf(stderr, "You have to finish implementing main() "
-	    "before the Jeux server will function.\n");
+    int listenfd, *connfdp;
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+    pthread_t tid;
+
+    listenfd = Open_listenfd(port);
+    if(listenfd == -1 || listenfd == -2) {
+        debug("Server not made.");
+        exit(EXIT_FAILURE);
+    }
+    else debug("Server made successfully.");
+    while(1) {
+        clientlen=sizeof(struct sockaddr_storage);
+        connfdp = Malloc(sizeof(int));
+        *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+        Pthread_create(&tid, NULL, thread, connfdp);
+    }
+
+    //fprintf(stderr, "You have to finish implementing main() before the Jeux server will function.\n");
 
     terminate(EXIT_FAILURE);
 }
@@ -67,4 +119,18 @@ void terminate(int status) {
 
     debug("%ld: Jeux server terminating", pthread_self());
     exit(status);
+}
+
+void sighup_handler() {
+    debug("Sighup BRO");
+    terminate(EXIT_SUCCESS);
+}
+
+void *thread(void *vargp) {
+    int connfd = *((int *)vargp);
+    Pthread_detach(pthread_self());
+    Free(vargp);
+    jeux_client_service(vargp);
+    Close(connfd);
+    return NULL;
 }

@@ -28,6 +28,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <dirent.h>
 
 /* Default file permissions are DEF_MODE & ~DEF_UMASK */
 /* $begin createmasks */
@@ -52,7 +53,7 @@ typedef struct {
 /* $end rio_t */
 
 /* External variables */
-//extern int h_errno;    /* Defined by BIND for DNS errors */ 
+extern int h_errno;    /* Defined by BIND for DNS errors */ 
 extern char **environ; /* Defined by libc */
 
 /* Misc constants */
@@ -187,8 +188,8 @@ ssize_t Rio_readnb(rio_t *rp, void *usrbuf, size_t n);
 ssize_t Rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
 
 /* Reentrant protocol-independent client/server helpers */
-int open_clientfd(char *hostname, char *port);
-int open_listenfd(char *port);
+int open_clientfd(char *hostname, char *portno);
+int open_listenfd(char *portno);
 
 /* Wrappers for reentrant protocol-independent client/server helpers */
 int Open_clientfd(char *hostname, char *port);
