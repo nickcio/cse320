@@ -1,4 +1,3 @@
-#include "cli_struct.h"
 #include "client_registry.h"
 #include "jeux_globals.h"
 #include "debug.h"
@@ -67,11 +66,13 @@ void *jeux_client_service(void *arg) {
                     char *playername = payload[0];
                     debug("11!");
                     PLAYER *newplayer = player_create(playername);
-                    debug("12!");
+                    debug("12! %p %p %s",cli,newplayer,playername);
                     if(client_login(cli,newplayer) != 0) {
+                        debug("IN!");
                         sendpack(fd,hdr,payload,JEUX_NACK_PKT);
                     }
                     else{
+                        debug("IN GOOD!");
                         sendpack(fd,hdr,payload,JEUX_ACK_PKT);
                     }
                     debug("13!");

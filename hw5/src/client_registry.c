@@ -1,4 +1,3 @@
-#include "cli_struct.h"
 #include "client_registry.h"
 #include "jeux_globals.h"
 #include <stdlib.h>
@@ -9,24 +8,19 @@
 #include <semaphore.h>
 #include "csapp.h"
 
-int clientnum;
-
 typedef struct client_registry {
-    CLIENT *first;
+    int clientnum;
+    CLIENT *clients[MAX_CLIENTS];
 }CLIENT_REGISTRY;
 
 pthread_mutex_t lock;
 sem_t sema;
 CLIENT_REGISTRY *creg_init() {
     pthread_mutex_init(&lock,NULL);
-    clientnum = 0;
-    CLIENT_REGISTRY *creg = malloc(sizeof(CLIENT_REGISTRY));
-    CLIENT *new = malloc(sizeof(CLIENT));
-    new->fd = -1;
-    new->next = NULL;
-    new->prev = NULL;
+    CLIENT_REGISTRY *creg = calloc(1,sizeof(CLIENT_REGISTRY));
+    creg->clients[0] = NULL;
+    creg->clientnum = 0;
     Sem_init(&sema,0,1);
-    creg->first = new;
     return creg;
 }
 
@@ -56,18 +50,11 @@ void creg_fini(CLIENT_REGISTRY *cr) {
  * is successful, otherwise NULL.
  */
 CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
-    if(cr == NULL || fd < 0) return NULL;
-    //pthread_mutex_lock(&lock);
-    CLIENT *new = malloc(sizeof(CLIENT));
-    new->fd = fd;
-    new->next=NULL;
-    CLIENT *curr = cr->first;
-    while(curr->next != NULL) curr=curr->next;
-    curr->next=new;
-    new->prev=curr;
-    new->name=NULL;
-    clientnum++;
-    if(clientnum == 1) P(&sema);
+    if(cr == NULL) return NULL;
+    pthread_mutex_lock(&lock);
+    CLIENT *new = client_create(cr,fd);
+    cr->clients[cr->clientnum] = new;
+    new = client_ref(new,"reg");
     pthread_mutex_unlock(&lock);
     return new;
 }
@@ -87,13 +74,24 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
  */
 int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
     if(cr == NULL || client == NULL) return -1;
-    //pthread_mutex_lock(&lock);
-    close(client->fd);
-    client->prev->next = client->next;
-    client->next->prev = client->prev;
-    free(client);
-    clientnum--;
-    if(clientnum == 0) V(&sema);
+    pthread_mutex_lock(&lock);
+    int i = 0;
+    while(i < cr->clientnum) {
+        if(cr->clients[i] == client) {
+            break;
+        }
+    }
+    if(i == cr->clientnum) {
+        return -1;
+    }
+    client_unref(client,"unreg");
+    int j = i;
+    while(j < cr->clientnum-1) {
+        cr->clients[j] = cr->clients[j+1];
+    }
+    cr->clientnum--;
+    cr->clients[cr->clientnum] = NULL;
+    if(cr->clientnum == 0) V(&sema);
     pthread_mutex_unlock(&lock);
     return 0;
 }
@@ -109,10 +107,10 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
  * username, if there is one, otherwise NULL.
  */
 CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
-    CLIENT *curr = cr->first;
-    while(curr != NULL) {
-        if(strcmp(curr->name,user) == 0) return curr;
-        curr = curr->next;
+    for(int i = 0; i < cr->clientnum; i++) {
+        CLIENT *curr = cr->clients[i];
+        char *currname = player_get_name(client_get_player(curr));
+        if(strcmp(currname,user) == 0) return curr;
     }
     return NULL;
 }
@@ -129,7 +127,20 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
  * @return the list of usernames as a NULL-terminated array of strings.
  */
 PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
-    return NULL;
+    PLAYER *players[cr->clientnum];
+    int j = 0; //player num
+    for(int i = 0; i < cr->clientnum; i++) {
+        CLIENT *curr = cr->clients[i];
+        PLAYER *play = client_get_player(curr);
+        if(play != NULL) {
+            j++;
+            players[j] = play;
+        }
+    }
+    players[j+1] = NULL;
+    PLAYER **players2 = calloc(j+1,sizeof(PLAYER *));
+    memcpy(players2,players,(j+1)*sizeof(PLAYER *));
+    return players2;
 }
 
 /*
@@ -155,9 +166,7 @@ void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
-    CLIENT *curr = cr->first;
-    while(curr != NULL) {
-        shutdown(curr->fd,SHUT_RD);
-        curr = curr->next;
+    for(int i = 0; i < cr->clientnum; i++) {
+        shutdown(client_get_fd(cr->clients[i]),SHUT_RD);
     }
 }
