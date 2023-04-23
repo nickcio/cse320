@@ -90,10 +90,17 @@ int main(int argc, char* argv[]){
     }
     else debug("Server made successfully.");
     while(1) {
+        debug("X1");
         clientlen=sizeof(struct sockaddr_storage);
-        connfdp = Malloc(sizeof(int));
+        debug("X2");
+        connfdp = Calloc(1,sizeof(int));
+        debug("X3");
         *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
-        Pthread_create(&tid, NULL, thread, connfdp);
+        if(*connfdp < 0) {
+            debug("X5");
+        }
+        debug("X4");
+        Pthread_create(&tid, NULL, jeux_client_service, connfdp);
     }
 
     //fprintf(stderr, "You have to finish implementing main() before the Jeux server will function.\n");
@@ -124,13 +131,4 @@ void terminate(int status) {
 void sighup_handler() {
     debug("Sighup BRO");
     terminate(EXIT_SUCCESS);
-}
-
-void *thread(void *vargp) {
-    int connfd = *((int *)vargp);
-    Pthread_detach(pthread_self());
-    Free(vargp);
-    jeux_client_service(vargp);
-    Close(connfd);
-    return NULL;
 }
