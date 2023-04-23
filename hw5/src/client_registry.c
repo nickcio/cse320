@@ -1,12 +1,12 @@
+#include "cli_struct.h"
 #include "client_registry.h"
+#include "jeux_globals.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include "cli_struct.h"
-#include "client.h"
 #include "csapp.h"
 
 int clientnum;
@@ -57,7 +57,7 @@ void creg_fini(CLIENT_REGISTRY *cr) {
  */
 CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
     if(cr == NULL || fd < 0) return NULL;
-    pthread_mutex_lock(&lock);
+    //pthread_mutex_lock(&lock);
     CLIENT *new = malloc(sizeof(CLIENT));
     new->fd = fd;
     new->next=NULL;
@@ -87,8 +87,13 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
  */
 int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
     if(cr == NULL || client == NULL) return -1;
-    pthread_mutex_lock(&lock);
-
+    //pthread_mutex_lock(&lock);
+    close(client->fd);
+    client->prev->next = client->next;
+    client->next->prev = client->prev;
+    free(client);
+    clientnum--;
+    if(clientnum == 0) V(&sema);
     pthread_mutex_unlock(&lock);
     return 0;
 }
