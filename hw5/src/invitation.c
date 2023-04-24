@@ -77,7 +77,10 @@ GAME *inv_get_game(INVITATION *inv){
 int inv_accept(INVITATION *inv) {
     if(inv->state != INV_OPEN_STATE) return -1;
     GAME *newgame = game_create();
-    if(newgame != NULL) inv->game = newgame;
+    if(newgame != NULL) {
+        inv->game = newgame;
+        game_ref(newgame,"inv accept");
+    }
     else return -1;
     return 0;
 }

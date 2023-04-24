@@ -32,6 +32,7 @@ void sendpack(int fd,JEUX_PACKET_HEADER *hdr,void **payload,JEUX_PACKET_TYPE typ
     hdr->timestamp_sec = tspec.tv_sec;
     hdr->timestamp_nsec = tspec.tv_nsec;
     void *pl;
+    debug("Here!");
     if(payload == NULL) {
         hdr->size = 0;
         pl = NULL;
@@ -88,13 +89,13 @@ void *jeux_client_service(void *arg) {
     int terminate = 0;
     while(!terminate) {
         payload = ps;
-        debug("START");
+        debug("START %d",client_get_fd(cli));
         if(proto_recv_packet(fd,hdr,payload) != 0) {
             terminate = 1;
-            debug("NOT");
+            debug("NOT %d",client_get_fd(cli));
         }
         else{
-            debug("RECVD");
+            debug("RECVD %d",client_get_fd(cli));
             JEUX_PACKET_TYPE t = hdr->type;
             if(!loggedin) {
                 if(t==JEUX_LOGIN_PKT) {
@@ -104,32 +105,32 @@ void *jeux_client_service(void *arg) {
                     debug("12! %p %p %s",cli,newplayer,playername);
                     if(client_login(cli,newplayer) != 0) {
                         debug("IN!");
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
                         debug("IN GOOD!");
                         loggedin = 1;
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,0);
                     }
                     debug("13!");
                 }
                 else{
                     debug("Log in first");
-                    sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                    clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                 }
             }
             else{
                 if(t==JEUX_LOGIN_PKT) {
                     debug("Already logged in");
-                    sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                    clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                 }
                 else if(t==JEUX_USERS_PKT) {
-                    debug("OK");
+                    debug("OK %d",client_get_fd(cli));
                     PLAYER** players = creg_all_players(client_registry);
                     FILE *fp;
                     size_t size;
                     char* buff;
-                    debug("OK2");
+                    debug("OK2 %d",client_get_fd(cli));
                     fp = open_memstream(&buff,&size);
                     PLAYER** ps = players;
                     while(*ps != NULL) {
@@ -139,7 +140,7 @@ void *jeux_client_service(void *arg) {
                     }
                     fflush(fp);
                     debug("String: %s, size: %ld",buff,size);
-                    sendpack(fd,hdr,(void**)(&buff),JEUX_ACK_PKT,size,0,0);
+                    clientsendpack(cli,hdr,(void**)(&buff),JEUX_ACK_PKT,size,0,0);
                     fclose(fp);
                     free(buff);
                     free(players);
@@ -153,14 +154,14 @@ void *jeux_client_service(void *arg) {
                     CLIENT *oc = creg_lookup(client_registry,targetname);
                     debug("OK3");
                     if(oc == NULL) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
                         int self = role == FIRST_PLAYER_ROLE ? SECOND_PLAYER_ROLE : FIRST_PLAYER_ROLE;
                         debug("OK4 %p %p %d %d",cli,oc,self,role);
                         int inv = client_make_invitation(cli,oc,self,role);
                         debug("OK5");
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,inv);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,inv);
                     }
                 }
                 else if(t==JEUX_REVOKE_PKT) {
@@ -168,10 +169,10 @@ void *jeux_client_service(void *arg) {
                     int id = hdr->id;
                     int fail = client_revoke_invitation(cli,id);
                     if(fail) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,0);
                     }
                 }
                 else if(t==JEUX_DECLINE_PKT) {
@@ -179,35 +180,41 @@ void *jeux_client_service(void *arg) {
                     int id = hdr->id;
                     int fail = client_decline_invitation(cli,id);
                     if(fail) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,0);
                     }
                 }
                 else if(t==JEUX_ACCEPT_PKT) {
-                    debug("OK");
+                    debug("OK %d",client_get_fd(cli));
                     int id = hdr->id;
                     char* start = NULL;
                     int fail = client_accept_invitation(cli,id,&start);
+                    debug("ACCEPTED");
                     if(fail) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
-                        sendpack(fd,hdr,(void**)&start,JEUX_ACK_PKT,strlen(start),0,0);
-                        free(start);
+                        debug("Start.");
+                        debug("START: %s",start);
+                        size_t sizer = 0;
+                        if(start != NULL) sizer = strlen(start);
+                        clientsendpack(cli,hdr,(void**)&start,JEUX_ACK_PKT,sizer,0,0);
+                        if(start != NULL) free(start);
                     }
+                    debug("ACCEPTED DONE %d",client_get_fd(cli));
                 }
                 else if(t==JEUX_MOVE_PKT) {
-                    debug("OK");
+                    debug("OK %d",client_get_fd(cli));
                     char *move = payload[0];
                     int id = hdr->id;
                     int fail = client_make_move(cli,id,move);
                     if(fail) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,0);
                     }
                 }
                 else if(t==JEUX_RESIGN_PKT) {
@@ -215,16 +222,19 @@ void *jeux_client_service(void *arg) {
                     int id = hdr->id;
                     int fail = client_resign_game(cli,id);
                     if(fail) {
-                        sendpack(fd,hdr,NULL,JEUX_NACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
-                        sendpack(fd,hdr,NULL,JEUX_ACK_PKT,0,0,0);
+                        clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,0);
                     }
+                }
+                else if(t == JEUX_ENDED_PKT) {
+                    clientsendpack(cli,hdr,NULL,JEUX_ACK_PKT,0,0,hdr->id);
                 }
             }
             
         }
-        debug("STILL HERE");
+        debug("STILL HERE %d",client_get_fd(cli));
         payloadre(ps);
     }
     debug("DONE");
