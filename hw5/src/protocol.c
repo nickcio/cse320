@@ -9,8 +9,10 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
     //get size
     debug("SEND PACKET");
     uint16_t data_size;
+    size_t oldsize = 0;
     if(data == NULL) data_size = 0;
     else {
+        oldsize = hdr->size;
         data_size = htons(hdr->size);
         hdr->size = data_size;
     }
@@ -32,7 +34,8 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
     if(!data_size) return 0;
 
     void *td = data;
-    size_t ds = data_size;
+    size_t ds = oldsize;
+    debug("DATA: %s SIZE: %ld SIZE2: %d",(char *)data,oldsize,data_size);
     while(ds > 0) {
         ssize_t total = write(fd,td,ds);
         if(total == -1) return -1;

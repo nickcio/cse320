@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include "csapp.h"
+#include "debug.h"
 
 typedef struct client_registry {
     int clientnum;
@@ -33,7 +34,10 @@ CLIENT_REGISTRY *creg_init() {
  * be referenced again.
  */
 void creg_fini(CLIENT_REGISTRY *cr) {
-
+    pthread_mutex_lock(&lock);
+    if(cr != NULL) free(cr);
+    pthread_mutex_unlock(&lock);
+    pthread_mutex_destroy(&lock);
 }
 
 /*
@@ -55,6 +59,7 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
     CLIENT *new = client_create(cr,fd);
     cr->clients[cr->clientnum] = new;
     new = client_ref(new,"reg");
+    cr->clientnum++;
     pthread_mutex_unlock(&lock);
     return new;
 }
@@ -107,11 +112,16 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
  * username, if there is one, otherwise NULL.
  */
 CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
+    pthread_mutex_lock(&lock);
     for(int i = 0; i < cr->clientnum; i++) {
         CLIENT *curr = cr->clients[i];
         char *currname = player_get_name(client_get_player(curr));
-        if(strcmp(currname,user) == 0) return curr;
+        if(strcmp(currname,user) == 0) {
+            pthread_mutex_unlock(&lock);
+            return curr;
+        }
     }
+    pthread_mutex_unlock(&lock);
     return NULL;
 }
 
@@ -127,19 +137,25 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
  * @return the list of usernames as a NULL-terminated array of strings.
  */
 PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
+    pthread_mutex_lock(&lock);
     PLAYER *players[cr->clientnum];
+    debug("players: %p, clientnum: %d",players,cr->clientnum);
     int j = 0; //player num
     for(int i = 0; i < cr->clientnum; i++) {
         CLIENT *curr = cr->clients[i];
         PLAYER *play = client_get_player(curr);
+        debug("client: %p player: %p",curr,play);
         if(play != NULL) {
-            j++;
+            debug("playername: %s, j: %d",player_get_name(play),j);
             players[j] = play;
+            j++;
         }
     }
-    players[j+1] = NULL;
-    PLAYER **players2 = calloc(j+1,sizeof(PLAYER *));
-    memcpy(players2,players,(j+1)*sizeof(PLAYER *));
+    players[j] = NULL;
+    PLAYER **players2 = calloc(j,sizeof(PLAYER *));
+    memcpy(players2,players,(j)*sizeof(PLAYER *));
+    //debug("player0: %s",player_get_name(players2[0]));
+    pthread_mutex_unlock(&lock);
     return players2;
 }
 
@@ -166,7 +182,10 @@ void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
+    pthread_mutex_lock(&lock);
     for(int i = 0; i < cr->clientnum; i++) {
-        shutdown(client_get_fd(cr->clients[i]),SHUT_RD);
+        int fd = client_get_fd(cr->clients[i]);
+        if(fd != -1) shutdown(fd,SHUT_RD);
     }
+    pthread_mutex_unlock(&lock);
 }
