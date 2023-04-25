@@ -101,7 +101,7 @@ void *jeux_client_service(void *arg) {
                 if(t==JEUX_LOGIN_PKT) {
                     char *playername = payload[0];
                     debug("11!");
-                    PLAYER *newplayer = player_create(playername);
+                    PLAYER *newplayer = preg_register(player_registry,playername);
                     debug("12! %p %p %s",cli,newplayer,playername);
                     if(client_login(cli,newplayer) != 0) {
                         debug("IN!");
