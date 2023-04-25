@@ -592,10 +592,11 @@ int client_make_move(CLIENT *client, int id, char *move) {
         if(status2 == -1) return -1;
     }
     if(game_is_over(game) == 1) {
+        int winner = game_get_winner(game);
         JEUX_PACKET_HEADER *ack2 = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack2->type = JEUX_ENDED_PKT;
         ack2->id = cli_find_inv(source,inv);
-        ack2->role = game_get_winner(game);
+        ack2->role = winner;
         ack2->size = 0;
         struct timespec tspec;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
@@ -608,7 +609,7 @@ int client_make_move(CLIENT *client, int id, char *move) {
         JEUX_PACKET_HEADER *ack3 = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack3->type = JEUX_ENDED_PKT;
         ack3->id = cli_find_inv(target,inv);
-        ack3->role = game_get_winner(game);
+        ack3->role = winner;
         ack3->size = 0;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
         ack3->timestamp_sec = tspec.tv_sec;
@@ -616,6 +617,12 @@ int client_make_move(CLIENT *client, int id, char *move) {
         int status4 = client_send_packet(target,ack3,NULL);
         if(ack3 != NULL) free(ack3);
         if(status4 == -1) return -1;
+
+        int sr = inv_get_source_role(inv);
+        PLAYER *sp = client_get_player(source);
+        PLAYER *tp = client_get_player(target);
+        if(sr == FIRST_PLAYER_ROLE) player_post_result(sp,tp,winner);
+        else player_post_result(tp,sp,winner);
 
         client_remove_invitation(source,inv);
         client_remove_invitation(target,inv);
