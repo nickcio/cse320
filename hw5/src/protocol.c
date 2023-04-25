@@ -17,7 +17,7 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
         hdr->size = data_size;
     }
 
-    debug("RECV PACKET2: %d %d",fd,hdr->type);
+    debug("SEND PACKET2: %d %d",fd,hdr->type);
     uint32_t timesec = htonl(hdr->timestamp_sec);
     uint32_t timensec = htonl(hdr->timestamp_nsec);
     hdr->timestamp_sec = timesec;
@@ -31,13 +31,14 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
         bs-=total;
         temp+=total;
     }
-    debug("RECV PACKET3: %d %d",fd,hdr->type);
+    debug("SEND PACKET3: %d %d %ld",fd,hdr->type,oldsize);
     if(!data_size) return 0;
-    debug("RECV PACKET4: %d %d",fd,hdr->type);
+    debug("SEND PACKET4: %d %d %s",fd,hdr->type,(char*)data);
     void *td = data;
     size_t ds = oldsize;
     debug("DATA: %s SIZE: %ld SIZE2: %d",(char *)data,oldsize,data_size);
     while(ds > 0) {
+        debug("writing");
         ssize_t total = write(fd,td,ds);
         if(total == -1) return -1;
         ds-=total;

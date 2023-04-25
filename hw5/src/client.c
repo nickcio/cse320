@@ -160,6 +160,7 @@ int client_send_packet(CLIENT *player, JEUX_PACKET_HEADER *pkt, void *data) {
     if(player == NULL) return -1;
     int fd = player->fd;
     JEUX_PACKET_HEADER *hdr = pkt;
+    if(data == NULL) hdr->size = 0;
     debug("Cleint: %d Pkt type: %d Data: %p",fd,hdr->type,data);
     return proto_send_packet(fd,hdr,data);
 }
@@ -462,10 +463,10 @@ int client_accept_invitation(CLIENT *client, int id, char **strp) {
     }
     else if(inv_get_target_role(inv) == FIRST_PLAYER_ROLE) {
         debug("sheckwes3");
-        status = client_send_packet(source,ack,*strp);
+        status = client_send_packet(source,ack,NULL);
         status2 = client_send_ack(target,*strp,size);
         if(status == -1 || status2 == -1) return -1; 
-        debug("sheckwes4");
+        //debug("sheckwes4");
     }
     debug("Thug4");
     if(ack != NULL) free(ack);
@@ -566,22 +567,25 @@ int client_make_move(CLIENT *client, int id, char *move) {
     GAME *game = inv_get_game(inv);
     if(game == NULL) return -1;
     GAME_MOVE *gmove = game_parse_move(game,role,move);
-    if(move == NULL) return -1;
+    debug("BEFORE MOVE!");
+    if(gmove == NULL) return -1;
+    debug("AFTER MOVE!");
     int st = game_apply_move(game,gmove);
+    free(gmove);
     if(st == -1) return -1;
     else{
         int ind = cli_find_inv(opp,inv);
+        char *state = game_unparse_state(game);
         JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack->type = JEUX_MOVED_PKT;
         ack->id = ind;
         ack->role = 0;
-        ack->size = 0;
+        ack->size = strlen(state);
         struct timespec tspec;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
         ack->timestamp_sec = tspec.tv_sec;
         ack->timestamp_nsec = tspec.tv_nsec;
-        char *state = game_unparse_state(game);
-        debug("STATE: %s",state);
+        debug("STATE: %s OPP",state);
         int status2 = client_send_packet(opp,ack,state);
         if(state != NULL) free(state);
         if(ack != NULL) free(ack);
@@ -591,7 +595,7 @@ int client_make_move(CLIENT *client, int id, char *move) {
         JEUX_PACKET_HEADER *ack2 = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack2->type = JEUX_ENDED_PKT;
         ack2->id = cli_find_inv(source,inv);
-        ack2->role = 0;
+        ack2->role = game_get_winner(game);
         ack2->size = 0;
         struct timespec tspec;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
@@ -604,7 +608,7 @@ int client_make_move(CLIENT *client, int id, char *move) {
         JEUX_PACKET_HEADER *ack3 = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack3->type = JEUX_ENDED_PKT;
         ack3->id = cli_find_inv(target,inv);
-        ack3->role = 0;
+        ack3->role = game_get_winner(game);
         ack3->size = 0;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
         ack3->timestamp_sec = tspec.tv_sec;
@@ -612,6 +616,9 @@ int client_make_move(CLIENT *client, int id, char *move) {
         int status4 = client_send_packet(target,ack3,NULL);
         if(ack3 != NULL) free(ack3);
         if(status4 == -1) return -1;
+
+        client_remove_invitation(source,inv);
+        client_remove_invitation(target,inv);
     }
     return 0;
 }
