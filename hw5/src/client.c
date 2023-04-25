@@ -31,7 +31,13 @@ typedef struct client {
  * @return  The newly created CLIENT object, if creation is successful,
  * otherwise NULL.
  */
+pthread_mutex_t lockc; //Normal lock
+pthread_mutex_t lock2; //Lock for ref functions only
+pthread_mutex_t lock3; //The legendary lock 3, for client add&remove invitation
 CLIENT *client_create(CLIENT_REGISTRY *creg, int fd) {
+    pthread_mutex_init(&lockc,NULL);
+    pthread_mutex_init(&lock2,NULL);
+    pthread_mutex_init(&lock3,NULL);
     CLIENT *new = calloc(1,sizeof(CLIENT));
     new->fd = fd;
     new->ref = 0;
@@ -52,8 +58,10 @@ CLIENT *client_create(CLIENT_REGISTRY *creg, int fd) {
  */
 CLIENT *client_ref(CLIENT *client, char *why) {
     if(client == NULL) return NULL;
+    pthread_mutex_lock(&lock2);
     debug("client %p ref: %s",client,why);
     client->ref++;
+    pthread_mutex_unlock(&lock2);
     return client;
 }
 
@@ -69,9 +77,17 @@ CLIENT *client_ref(CLIENT *client, char *why) {
  */
 void client_unref(CLIENT *client, char *why) {
     if(client != NULL) {
+        pthread_mutex_lock(&lock2);
         debug("client %p ref: %s",client,why);
         client->ref--;
-        if(client->ref==0) free(client);
+        if(client->ref==0) {
+            free(client);
+            pthread_mutex_unlock(&lock2);
+            pthread_mutex_destroy(&lockc);
+            pthread_mutex_destroy(&lock2);
+            pthread_mutex_destroy(&lock3);
+        }
+        else pthread_mutex_unlock(&lock2);
     }
 }
 
@@ -90,9 +106,11 @@ void client_unref(CLIENT *client, char *why) {
  */
 int client_login(CLIENT *client, PLAYER *player) {
     if(client == NULL || player == NULL || client->login == 1) return -1;
+    pthread_mutex_lock(&lockc);
     client->login = 1;
     client->player = player;
     player_ref(player,"login");
+    pthread_mutex_unlock(&lockc);
     return 0;
 }
 
@@ -110,9 +128,11 @@ int client_login(CLIENT *client, PLAYER *player) {
  */
 int client_logout(CLIENT *client) {
     if(client == NULL || client->login == 0 || client->player == NULL) return -1;
+    pthread_mutex_lock(&lockc);
     client->login = 0;
     player_unref(client->player,"logout");
     client->player = NULL;
+    pthread_mutex_unlock(&lockc);
     return 0;
 }
 
@@ -245,10 +265,15 @@ int cli_find_inv(CLIENT *client, INVITATION *inv) {
  */
 int client_add_invitation(CLIENT *client, INVITATION *inv) {
     if(client == NULL || inv == NULL) return -1;
+    pthread_mutex_lock(&lock3);
     int ind = cli_find_inv_null(client);
-    if(ind == -1) return -1;
+    if(ind == -1) {
+        pthread_mutex_unlock(&lock3);
+        return -1;
+    }
     client->invs[ind] = inv;
     inv_ref(inv,"add inv");
+    pthread_mutex_unlock(&lock3);
     return ind;
 }
 
@@ -264,10 +289,15 @@ int client_add_invitation(CLIENT *client, INVITATION *inv) {
  */
 int client_remove_invitation(CLIENT *client, INVITATION *inv) {
     if(client == NULL || inv == NULL) return -1;
+    pthread_mutex_lock(&lock3);
     int ind = cli_find_inv(client,inv);
-    if(ind == -1) return -1;
+    if(ind == -1) {
+        pthread_mutex_unlock(&lock3);
+        return -1;
+    }
     client->invs[ind] = NULL;
     inv_unref(inv,"add inv");
+    pthread_mutex_unlock(&lock3);
     return ind;
 }
 
@@ -288,14 +318,28 @@ int client_remove_invitation(CLIENT *client, INVITATION *inv) {
  */
 int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role, GAME_ROLE target_role) {
     if(source == NULL || target == NULL) return -1;
+    pthread_mutex_lock(&lockc);
+    debug("INSIDE MAKE INV!!!");
     INVITATION *inv = inv_create(source,target,source_role,target_role);
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
+    debug("IN INV 1");
     int s = client_add_invitation(source,inv);
     inv_ref(inv,"source add inv");
-    if(s == -1) return -1; 
+    if(s == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
+    debug("IN INV 2");
     int t = client_add_invitation(target,inv);
     inv_ref(inv,"target add inv");
-    if(t == -1) return -1;
+    if(t == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
+    debug("IN INV 3");
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_INVITED_PKT;
     ack->id = s;
@@ -305,8 +349,12 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
     clock_gettime(CLOCK_MONOTONIC,&tspec);
     ack->timestamp_sec = tspec.tv_sec;
     ack->timestamp_nsec = tspec.tv_nsec;
+    debug("IN INV 4");
     int status = client_send_packet(target,ack,NULL);
     if(ack != NULL) free(ack);
+    debug("IN INV 5");
+    pthread_mutex_unlock(&lockc);
+    debug("IN INV 6");
     if(status != -1) return s;
     return -1;
 }
@@ -330,17 +378,33 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
  */
 int client_revoke_invitation(CLIENT *client, int id) {
     if(client == NULL || id < 0) return -1;
+    pthread_mutex_lock(&lockc);
     INVITATION *inv = client->invs[id];
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *source = inv_get_source(inv);
-    if(client != source) return -1;
+    if(client != source) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *target = inv_get_target(inv);
     int s = client_remove_invitation(source,inv);
-    if(s == -1) return -1; 
+    if(s == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int t = client_remove_invitation(target,inv);
-    if(t == -1) return -1; 
+    if(t == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int rf = inv_close(inv,NULL_ROLE);
-    if(rf == -1) return -1;
+    if(rf == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_REVOKED_PKT;
     ack->id = t;
@@ -352,6 +416,7 @@ int client_revoke_invitation(CLIENT *client, int id) {
     ack->timestamp_nsec = tspec.tv_nsec;
     int status = client_send_packet(target,ack,NULL);
     if(ack != NULL) free(ack);
+    pthread_mutex_unlock(&lockc);
     return status;
 }
 
@@ -374,27 +439,44 @@ int client_revoke_invitation(CLIENT *client, int id) {
  */
 int client_decline_invitation(CLIENT *client, int id) {
     if(client == NULL || id < 0) return -1;
+    pthread_mutex_lock(&lockc);
     INVITATION *inv = client->invs[id];
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *source = inv_get_source(inv);
     CLIENT *target = inv_get_target(inv);
-    if(client != target) return -1;
+    if(client != target) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int s = client_remove_invitation(source,inv);
-    if(s == -1) return -1; 
+    if(s == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int t = client_remove_invitation(target,inv);
-    if(t == -1) return -1; 
+    if(t == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int rf = inv_close(inv,NULL_ROLE);
-    if(rf == -1) return -1;
+    if(rf == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_DECLINED_PKT;
-    ack->id = t;
+    ack->id = s;
     ack->role = 0;
     ack->size = 0;
     struct timespec tspec;
     clock_gettime(CLOCK_MONOTONIC,&tspec);
     ack->timestamp_sec = tspec.tv_sec;
     ack->timestamp_nsec = tspec.tv_nsec;
-    int status = client_send_packet(target,ack,NULL);
+    int status = client_send_packet(source,ack,NULL);
+    pthread_mutex_unlock(&lockc);
     if(ack != NULL) free(ack);
     return status;
 }
@@ -423,25 +505,33 @@ int client_decline_invitation(CLIENT *client, int id) {
  * @return 0 if the INVITATION is successfully accepted, otherwise -1.
  */
 int client_accept_invitation(CLIENT *client, int id, char **strp) {
-    debug("Thug1");
     if(client == NULL || id < 0) return -1;
+    pthread_mutex_lock(&lockc);
     INVITATION *inv = client->invs[id];
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *source = inv_get_source(inv);
     CLIENT *target = inv_get_target(inv);
-    if(client != target) return -1;
+    if(client != target) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     int at = inv_accept(inv);
-    if(at == -1) return -1;
-    debug("Thug2");
+    if(at == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     size_t size = 0;
     *strp = game_unparse_state(inv_get_game(inv));
     if(strp != NULL && *strp != NULL) size = strlen(*strp);
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_ACCEPTED_PKT;
     int ind = cli_find_inv(source,inv);
-    debug("Thug3");
     if(ind == -1) {
         if(ack != NULL) free(ack);
+        pthread_mutex_unlock(&lockc);
         return -1;
     }
     ack->id = ind;
@@ -453,24 +543,24 @@ int client_accept_invitation(CLIENT *client, int id, char **strp) {
     ack->timestamp_nsec = tspec.tv_nsec;
     int status = -1;
     int status2 = -1;
-    debug("Thug3");
     if(inv_get_source_role(inv) == FIRST_PLAYER_ROLE) {
-        debug("sheckwes");
         status = client_send_packet(source,ack,*strp);
         status2 = client_send_ack(target,NULL,0);
-        if(status == -1 || status2 == -1) return -1; 
-        debug("sheckwes2");
+        if(status == -1 || status2 == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1; 
+        }
     }
     else if(inv_get_target_role(inv) == FIRST_PLAYER_ROLE) {
-        debug("sheckwes3");
         status = client_send_packet(source,ack,NULL);
         status2 = client_send_ack(target,*strp,size);
-        if(status == -1 || status2 == -1) return -1; 
-        //debug("sheckwes4");
+        if(status == -1 || status2 == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1; 
+        }
     }
-    debug("Thug4");
     if(ack != NULL) free(ack);
-    debug("Thug5");
+    pthread_mutex_unlock(&lockc);
     return 0;
 }
 
@@ -491,8 +581,12 @@ int client_accept_invitation(CLIENT *client, int id, char **strp) {
  */
 int client_resign_game(CLIENT *client, int id) {
     if(client == NULL || id < 0) return -1;
+    pthread_mutex_lock(&lockc);
     INVITATION *inv = client->invs[id];
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *source = inv_get_source(inv);
     CLIENT *target = inv_get_target(inv);
     CLIENT *opp = source;
@@ -504,15 +598,24 @@ int client_resign_game(CLIENT *client, int id) {
     if(client == source) {
         role = inv_get_source_role(inv);
         idx = cli_find_inv(target,inv);
-        if(idx == -1) return -1;
+        if(idx == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1;
+        }
     }
     else {
         role = inv_get_target_role(inv);
         idx = cli_find_inv(source,inv);
-        if(idx == -1) return -1;
+        if(idx == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1;
+        }
     }
     int status = inv_close(inv,role);
-    if(status == -1) return -1;
+    if(status == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_RESIGNED_PKT;
     ack->id = idx;
@@ -524,6 +627,7 @@ int client_resign_game(CLIENT *client, int id) {
     ack->timestamp_nsec = tspec.tv_nsec;
     int status2 = client_send_packet(opp,ack,NULL);
     if(ack != NULL) free(ack);
+    pthread_mutex_unlock(&lockc);
     if(status2 == -1) return -1;
     return 0;
 }
@@ -553,8 +657,12 @@ int client_resign_game(CLIENT *client, int id) {
  */
 int client_make_move(CLIENT *client, int id, char *move) {
     if(client == NULL || id < 0) return -1;
+    pthread_mutex_lock(&lockc);
     INVITATION *inv = client->invs[id];
-    if(inv == NULL) return -1;
+    if(inv == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     CLIENT *source = inv_get_source(inv);
     CLIENT *target = inv_get_target(inv);
     GAME_ROLE role;
@@ -565,14 +673,23 @@ int client_make_move(CLIENT *client, int id, char *move) {
     }
     else role = inv_get_target_role(inv);
     GAME *game = inv_get_game(inv);
-    if(game == NULL) return -1;
+    if(game == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     GAME_MOVE *gmove = game_parse_move(game,role,move);
     debug("BEFORE MOVE!");
-    if(gmove == NULL) return -1;
+    if(gmove == NULL) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     debug("AFTER MOVE!");
     int st = game_apply_move(game,gmove);
     free(gmove);
-    if(st == -1) return -1;
+    if(st == -1) {
+        pthread_mutex_unlock(&lockc);
+        return -1;
+    }
     else{
         int ind = cli_find_inv(opp,inv);
         char *state = game_unparse_state(game);
@@ -589,7 +706,10 @@ int client_make_move(CLIENT *client, int id, char *move) {
         int status2 = client_send_packet(opp,ack,state);
         if(state != NULL) free(state);
         if(ack != NULL) free(ack);
-        if(status2 == -1) return -1;
+        if(status2 == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1;
+        }
     }
     if(game_is_over(game) == 1) {
         int winner = game_get_winner(game);
@@ -604,7 +724,10 @@ int client_make_move(CLIENT *client, int id, char *move) {
         ack2->timestamp_nsec = tspec.tv_nsec;
         int status3 = client_send_packet(source,ack2,NULL);
         if(ack2 != NULL) free(ack2);
-        if(status3 == -1) return -1;
+        if(status3 == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1;
+        }
 
         JEUX_PACKET_HEADER *ack3 = calloc(1,sizeof(JEUX_PACKET_HEADER));
         ack3->type = JEUX_ENDED_PKT;
@@ -616,7 +739,10 @@ int client_make_move(CLIENT *client, int id, char *move) {
         ack3->timestamp_nsec = tspec.tv_nsec;
         int status4 = client_send_packet(target,ack3,NULL);
         if(ack3 != NULL) free(ack3);
-        if(status4 == -1) return -1;
+        if(status4 == -1) {
+            pthread_mutex_unlock(&lockc);
+            return -1;
+        }
 
         int sr = inv_get_source_role(inv);
         PLAYER *sp = client_get_player(source);
@@ -627,5 +753,6 @@ int client_make_move(CLIENT *client, int id, char *move) {
         client_remove_invitation(source,inv);
         client_remove_invitation(target,inv);
     }
+    pthread_mutex_unlock(&lockc);
     return 0;
 }
