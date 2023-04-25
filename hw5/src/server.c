@@ -23,6 +23,12 @@ void payloadre(void **payload) {
     payload[1] = NULL;
 }
 
+void payloaddone(void **payload) {
+    if(payload[0] != NULL) free(payload[0]);
+    if(payload[1] != NULL) free(payload[1]);
+    if(payload != NULL) free(payload);
+}
+
 void sendpack(int fd,JEUX_PACKET_HEADER *hdr,void **payload,JEUX_PACKET_TYPE type,size_t size,int role,int id) {
     struct timespec tspec;
     clock_gettime(CLOCK_MONOTONIC,&tspec);
@@ -237,6 +243,8 @@ void *jeux_client_service(void *arg) {
         debug("STILL HERE %d",client_get_fd(cli));
         payloadre(ps);
     }
+    payloaddone(ps);
+    if(hdr != NULL) free(hdr);
     debug("DONE");
     return NULL;
 }
