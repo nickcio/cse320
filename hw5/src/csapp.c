@@ -31,33 +31,33 @@
 /* $begin unixerror */
 void unix_error(char *msg) /* Unix-style error */
 {
-    fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+    //fprintf(stderr, "%s: %s\n", msg, strerror(errno));
     exit(0);
 }
 /* $end unixerror */
 
 void posix_error(int code, char *msg) /* Posix-style error */
 {
-    fprintf(stderr, "%s: %s\n", msg, strerror(code));
+    //fprintf(stderr, "%s: %s\n", msg, strerror(code));
     exit(0);
 }
 
 void gai_error(int code, char *msg) /* Getaddrinfo-style error */
 {
-    fprintf(stderr, "%s: %s\n", msg, gai_strerror(code));
+    //fprintf(stderr, "%s: %s\n", msg, gai_strerror(code));
     exit(0);
 }
 
 void app_error(char *msg) /* Application error */
 {
-    fprintf(stderr, "%s\n", msg);
+    //fprintf(stderr, "%s\n", msg);
     exit(0);
 }
 /* $end errorfuns */
 
 void dns_error(char *msg) /* Obsolete gethostbyname error */
 {
-    fprintf(stderr, "%s\n", msg);
+    //fprintf(stderr, "%s\n", msg);
     exit(0);
 }
 
@@ -957,7 +957,7 @@ int open_clientfd(char *hostname, char *port) {
     hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. */
     hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections */
     if ((rc = getaddrinfo(hostname, port, &hints, &listp)) != 0) {
-        fprintf(stderr, "getaddrinfo failed (%s:%s): %s\n", hostname, port, gai_strerror(rc));
+        //fprintf(stderr, "getaddrinfo failed (%s:%s): %s\n", hostname, port, gai_strerror(rc));
         return -2;
     }
   
@@ -971,7 +971,7 @@ int open_clientfd(char *hostname, char *port) {
         if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1) 
             break; /* Success */
         if (close(clientfd) < 0) { /* Connect failed, try another */  //line:netp:openclientfd:closefd
-            fprintf(stderr, "open_clientfd: close failed: %s\n", strerror(errno));
+            //fprintf(stderr, "open_clientfd: close failed: %s\n", strerror(errno));
             return -1;
         } 
     } 
@@ -1005,7 +1005,7 @@ int open_listenfd(char *port)
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* ... on any IP address */
     hints.ai_flags |= AI_NUMERICSERV;            /* ... using port number */
     if ((rc = getaddrinfo(NULL, port, &hints, &listp)) != 0) {
-        fprintf(stderr, "getaddrinfo failed (port %s): %s\n", port, gai_strerror(rc));
+        //fprintf(stderr, "getaddrinfo failed (port %s): %s\n", port, gai_strerror(rc));
         return -2;
     }
 
@@ -1023,7 +1023,7 @@ int open_listenfd(char *port)
         if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0)
             break; /* Success */
         if (close(listenfd) < 0) { /* Bind failed, try the next */
-            fprintf(stderr, "open_listenfd close failed: %s\n", strerror(errno));
+            //fprintf(stderr, "open_listenfd close failed: %s\n", strerror(errno));
             return -1;
         }
     }
