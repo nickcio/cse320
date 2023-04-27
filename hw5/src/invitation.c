@@ -16,12 +16,15 @@ typedef struct invitation{
     GAME_ROLE srole;
     GAME_ROLE trole;
     GAME *game;
+    pthread_mutex_t locki;
+    pthread_mutex_t lock2;
 }INVITATION;
 
-pthread_mutex_t locki;
-pthread_mutex_t lock2;
+
 INVITATION *inv_create(CLIENT *source, CLIENT *target, GAME_ROLE source_role, GAME_ROLE target_role) {
     if(source == target) return NULL;
+    pthread_mutex_t locki;
+    pthread_mutex_t lock2;
     pthread_mutex_init(&locki,NULL);
     pthread_mutex_init(&lock2,NULL);
     INVITATION *new = calloc(1,sizeof(INVITATION));
@@ -34,31 +37,33 @@ INVITATION *inv_create(CLIENT *source, CLIENT *target, GAME_ROLE source_role, GA
     new->srole = source_role;
     new->trole = target_role;
     new->game = NULL;
+    new->locki = locki;
+    new->lock2 = lock2;
     new = inv_ref(new,"creation");
     return new;
 }
 
 INVITATION *inv_ref(INVITATION *inv, char *why) {
     if(inv == NULL) return NULL;
-    pthread_mutex_lock(&lock2);
+    pthread_mutex_lock(&inv->lock2);
     debug("invitation %p ref: %s",inv,why);
     inv->ref++;
-    pthread_mutex_unlock(&lock2);
+    pthread_mutex_unlock(&inv->lock2);
     return inv;
 }
 
 void inv_unref(INVITATION *inv, char *why) {
     if(inv != NULL) {
-        pthread_mutex_lock(&lock2);
+        pthread_mutex_lock(&inv->lock2);
         debug("invitation %p ref: %s",inv,why);
         inv->ref--;
         if(inv->ref == 0) {
             free(inv);
-            pthread_mutex_unlock(&lock2);
-            pthread_mutex_destroy(&locki);
-            pthread_mutex_destroy(&lock2);
+            pthread_mutex_unlock(&inv->lock2);
+            pthread_mutex_destroy(&inv->locki);
+            pthread_mutex_destroy(&inv->lock2);
         }
-        else pthread_mutex_unlock(&lock2);
+        else pthread_mutex_unlock(&inv->lock2);
     }
 }
 
@@ -89,49 +94,49 @@ GAME *inv_get_game(INVITATION *inv){
 
 int inv_accept(INVITATION *inv) {
     if(inv->state != INV_OPEN_STATE) return -1;
-    pthread_mutex_lock(&locki);
+    pthread_mutex_lock(&inv->locki);
     GAME *newgame = game_create();
     if(newgame != NULL) {
         inv->game = newgame;
         game_ref(newgame,"inv accept");
     }
     else {
-        pthread_mutex_unlock(&locki);
+        pthread_mutex_unlock(&inv->locki);
         return -1;
     }
-    pthread_mutex_unlock(&locki);
+    pthread_mutex_unlock(&inv->locki);
     return 0;
 }
 
 int inv_close(INVITATION *inv, GAME_ROLE role) {
-    pthread_mutex_lock(&locki);
+    pthread_mutex_lock(&inv->locki);
     if(inv->state != INV_OPEN_STATE && inv->state != INV_ACCEPTED_STATE) {
-        pthread_mutex_unlock(&locki);
+        pthread_mutex_unlock(&inv->locki);
         return -1;
     }
     if(inv->game != NULL) {
         if(game_is_over(inv->game)) {
             inv->state = INV_CLOSED_STATE;
-            pthread_mutex_unlock(&locki);
+            pthread_mutex_unlock(&inv->locki);
             return 0;
         }
         else{
             if(role == NULL_ROLE) {
-                pthread_mutex_unlock(&locki);
+                pthread_mutex_unlock(&inv->locki);
                 return -1;
             }
             int res = game_resign(inv->game,role);
             if(res) return -1;
             inv->state = INV_CLOSED_STATE;
-            pthread_mutex_unlock(&locki);
+            pthread_mutex_unlock(&inv->locki);
             return 0;
         }
     }
     else{
         inv->state = INV_CLOSED_STATE;
-        pthread_mutex_unlock(&locki);
+        pthread_mutex_unlock(&inv->locki);
         return 0;
     }
-    pthread_mutex_unlock(&locki);
+    pthread_mutex_unlock(&inv->locki);
     return -1;
 }

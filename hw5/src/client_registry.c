@@ -12,16 +12,20 @@
 typedef struct client_registry {
     int clientnum;
     CLIENT *clients[MAX_CLIENTS];
+    pthread_mutex_t lock;
+    sem_t sema;
 }CLIENT_REGISTRY;
 
-pthread_mutex_t lock;
-sem_t sema;
 CLIENT_REGISTRY *creg_init() {
+    pthread_mutex_t lock;
+    sem_t sema;
     pthread_mutex_init(&lock,NULL);
     CLIENT_REGISTRY *creg = calloc(1,sizeof(CLIENT_REGISTRY));
     creg->clients[0] = NULL;
     creg->clientnum = 0;
+    creg->lock = lock;
     Sem_init(&sema,0,1);
+    creg->sema = sema;
     return creg;
 }
 
@@ -34,7 +38,7 @@ CLIENT_REGISTRY *creg_init() {
  * be referenced again.
  */
 void creg_fini(CLIENT_REGISTRY *cr) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     if(cr != NULL) {
         if(cr->clients != NULL) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
@@ -43,8 +47,8 @@ void creg_fini(CLIENT_REGISTRY *cr) {
         }
         free(cr);
     }
-    pthread_mutex_unlock(&lock);
-    pthread_mutex_destroy(&lock);
+    pthread_mutex_unlock(&cr->lock);
+    pthread_mutex_destroy(&cr->lock);
 }
 
 /*
@@ -62,12 +66,12 @@ void creg_fini(CLIENT_REGISTRY *cr) {
  */
 CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
     if(cr == NULL) return NULL;
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     CLIENT *new = client_create(cr,fd);
     cr->clients[cr->clientnum] = new;
     new = client_ref(new,"reg");
     cr->clientnum++;
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&cr->lock);
     return new;
 }
 
@@ -86,7 +90,7 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
  */
 int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
     if(cr == NULL || client == NULL) return -1;
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     int i = 0;
     while(i < cr->clientnum) {
         if(cr->clients[i] == client) {
@@ -103,8 +107,8 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
     }
     cr->clientnum--;
     cr->clients[cr->clientnum] = NULL;
-    if(cr->clientnum == 0) V(&sema);
-    pthread_mutex_unlock(&lock);
+    if(cr->clientnum == 0) V(&cr->sema);
+    pthread_mutex_unlock(&cr->lock);
     return 0;
 }
 
@@ -119,16 +123,16 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
  * username, if there is one, otherwise NULL.
  */
 CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     for(int i = 0; i < cr->clientnum; i++) {
         CLIENT *curr = cr->clients[i];
         char *currname = player_get_name(client_get_player(curr));
         if(strcmp(currname,user) == 0) {
-            pthread_mutex_unlock(&lock);
+            pthread_mutex_unlock(&cr->lock);
             return curr;
         }
     }
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&cr->lock);
     return NULL;
 }
 
@@ -144,7 +148,7 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
  * @return the list of usernames as a NULL-terminated array of strings.
  */
 PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     PLAYER *players[cr->clientnum];
     debug("players: %p, clientnum: %d",players,cr->clientnum);
     int j = 0; //player num
@@ -162,7 +166,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
     PLAYER **players2 = calloc(j,sizeof(PLAYER *));
     memcpy(players2,players,(j)*sizeof(PLAYER *));
     //debug("player0: %s",player_get_name(players2[0]));
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&cr->lock);
     return players2;
 }
 
@@ -175,7 +179,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
-    P(&sema);
+    P(&cr->sema);
 }
 
 /*
@@ -189,10 +193,10 @@ void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&cr->lock);
     for(int i = 0; i < cr->clientnum; i++) {
         int fd = client_get_fd(cr->clients[i]);
         if(fd != -1) shutdown(fd,SHUT_RD);
     }
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&cr->lock);
 }

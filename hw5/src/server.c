@@ -159,7 +159,7 @@ void *jeux_client_service(void *arg) {
                     debug("ROLE: %d",role);
                     CLIENT *oc = creg_lookup(client_registry,targetname);
                     debug("OK3");
-                    if(oc == NULL) {
+                    if(oc == NULL || oc == cli) {
                         clientsendpack(cli,hdr,NULL,JEUX_NACK_PKT,0,0,0);
                     }
                     else{
