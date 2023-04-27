@@ -12,6 +12,7 @@
 typedef struct player_registry {
     int playercount;
     PLAYER *players[MAX_CLIENTS];
+    pthread_mutex_t lock;
 }PLAYER_REGISTRY;
 
 /*
@@ -20,12 +21,14 @@ typedef struct player_registry {
  * @return the newly initialized PLAYER_REGISTRY, or NULL if initialization
  * fails.
  */
-pthread_mutex_t lock;
+
 PLAYER_REGISTRY *preg_init(void) {
+    pthread_mutex_t lock;
     pthread_mutex_init(&lock,NULL);
     PLAYER_REGISTRY *preg = calloc(1,sizeof(PLAYER_REGISTRY));
     preg->players[0] = NULL;
     preg->playercount=0;
+    preg->lock = lock;
     return preg;
 }
 
@@ -36,7 +39,7 @@ PLAYER_REGISTRY *preg_init(void) {
  * be referenced again.
  */
 void preg_fini(PLAYER_REGISTRY *preg) {
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&preg->lock);
     if(preg != NULL) {
         if(preg->players != NULL) {
             for(int i = 0; i < MAX_CLIENTS; i++) {
@@ -45,8 +48,8 @@ void preg_fini(PLAYER_REGISTRY *preg) {
         }
         free(preg);
     }
-    pthread_mutex_unlock(&lock);
-    pthread_mutex_destroy(&lock);
+    pthread_mutex_unlock(&preg->lock);
+    pthread_mutex_destroy(&preg->lock);
 }
 
 /*
@@ -65,25 +68,25 @@ void preg_fini(PLAYER_REGISTRY *preg) {
  */
 PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
     if(preg == NULL || name == NULL) return NULL;
-    pthread_mutex_lock(&lock);
+    pthread_mutex_lock(&preg->lock);
     int firstnull = -1;
     for(int i = 0; i < MAX_CLIENTS; i++) {
         if(preg->players[i] != NULL) {
             if(strcmp(name,player_get_name(preg->players[i])) == 0) {
-                pthread_mutex_unlock(&lock);
+                pthread_mutex_unlock(&preg->lock);
                 return preg->players[i];
             }
         }
         else if(firstnull == -1) firstnull = i;
     }
     if(firstnull == -1) {
-        pthread_mutex_unlock(&lock);
+        pthread_mutex_unlock(&preg->lock);
         return NULL;
     }
     PLAYER *new = player_create(name);
     preg->players[firstnull] = new;
     new = player_ref(new,"reg");
     preg->playercount++;
-    pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&preg->lock);
     return new;
 }

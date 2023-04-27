@@ -18,6 +18,8 @@ typedef struct game {
     int isover; //1 if game is over 0 if otherwise
     GAME_ROLE winner; //whoever won game
     char state[9]; //Represents 9 squares of a tic tac toe board
+    pthread_mutex_t lockg; //Lock for most functions
+    pthread_mutex_t lockr; //Lock for refs
 }GAME;
 
 typedef struct game_move {
@@ -25,10 +27,9 @@ typedef struct game_move {
     int spot; //where player is making their move
 }GAME_MOVE;
 
-pthread_mutex_t lockg; //Lock for most functions
-pthread_mutex_t lockr; //Lock for refs
-
 GAME *game_create(void) {
+    pthread_mutex_t lockg; //Lock for most functions
+    pthread_mutex_t lockr; //Lock for refs
     pthread_mutex_init(&lockg,NULL);
     pthread_mutex_init(&lockr,NULL);
     GAME *new = calloc(1,sizeof(GAME));
@@ -36,31 +37,33 @@ GAME *game_create(void) {
     new->turn = 0;
     new->isover = 0;
     new->winner = NULL_ROLE;
+    new->lockg = lockg;
+    new->lockr = lockr;
     game_ref(new,"game created");
     return new;
 }
 
 GAME *game_ref(GAME *game, char *why) {
     if(game == NULL) return NULL;
-    pthread_mutex_lock(&lockr);
+    pthread_mutex_lock(&game->lockr);
     debug("Game %p ref: %s",game,why);
     game->ref++;
-    pthread_mutex_unlock(&lockr);
+    pthread_mutex_unlock(&game->lockr);
     return game;
 }
 
 void game_unref(GAME *game, char *why) {
     if(game != NULL) {
-        pthread_mutex_lock(&lockr);
+        pthread_mutex_lock(&game->lockr);
         debug("game %p unref: %s",game,why);
         game->ref--;
         if(game->ref == 0) {
             free(game);
-            pthread_mutex_unlock(&lockr);
-            pthread_mutex_destroy(&lockg);
-            pthread_mutex_destroy(&lockr);
+            pthread_mutex_unlock(&game->lockr);
+            pthread_mutex_destroy(&game->lockg);
+            pthread_mutex_destroy(&game->lockr);
         }
-        else pthread_mutex_unlock(&lockr);
+        else pthread_mutex_unlock(&game->lockr);
     }
 }
 
@@ -85,47 +88,47 @@ int check_victory(GAME *game, GAME_ROLE role) {
 int game_apply_move(GAME *game, GAME_MOVE *move) {
     if(game == NULL || move == NULL || game->isover) return -1;
     if(move->role == NULL_ROLE) return -1;
-    pthread_mutex_lock(&lockg);
+    pthread_mutex_lock(&game->lockg);
     GAME_ROLE current = 1+(game->turn%2); //Whoevers turn it should be
     if(move->role != current) {
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return -1;
     }
     int spot = move->spot;
     if(spot < 0 || spot > 8) {
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return -1;
     }
     if(game->state[spot] != 0) {
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return -1;
     }
     game->state[spot] = current;
     if(check_victory(game,current)) {
         game->isover = 1;
         game->winner = current;
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return 0;
     }
     game->turn++;
     if(game->turn >= 9 && game->isover != 1) {
         game->isover = 1;
         game->winner = NULL_ROLE;
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return 0;
     }
-    pthread_mutex_unlock(&lockg);
+    pthread_mutex_unlock(&game->lockg);
     return 0;
 }
 
 int game_resign(GAME *game, GAME_ROLE role) {
     if(game == NULL || game->isover) return -1;
-    pthread_mutex_lock(&lockg);
+    pthread_mutex_lock(&game->lockg);
     game->isover = 1;
     if(role == FIRST_PLAYER_ROLE) game->winner = SECOND_PLAYER_ROLE;
     else if(role == SECOND_PLAYER_ROLE) game->winner = FIRST_PLAYER_ROLE;
     else game->winner = NULL_ROLE;
-    pthread_mutex_unlock(&lockg);
+    pthread_mutex_unlock(&game->lockg);
     return 0;
 }
 
@@ -152,12 +155,12 @@ char unparse_spot(char spot) {
 }
 
 char *game_unparse_state(GAME *game) {
-    pthread_mutex_lock(&lockg);
+    pthread_mutex_lock(&game->lockg);
     FILE *fp;
     char *buffer;
     size_t bsize;
     if((fp = open_memstream(&buffer,&bsize)) == NULL) {
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return NULL;
     }
     GAME_ROLE current = 1+(game->turn%2); //Whoevers turn it should be
@@ -170,7 +173,7 @@ char *game_unparse_state(GAME *game) {
     fprintf(fp,"%c to move\n",parse_spot(current));
     fflush(fp);
     fclose(fp);
-    pthread_mutex_unlock(&lockg);
+    pthread_mutex_unlock(&game->lockg);
     return buffer;
 }
 
@@ -186,18 +189,18 @@ GAME_ROLE game_get_winner(GAME *game) {
 
 GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
     if(game == NULL) return NULL;
-    pthread_mutex_lock(&lockg);
+    pthread_mutex_lock(&game->lockg);
     regex_t regs;
     int regerr = regcomp(&regs,"^(\\s)*[1-9](\\s)*$",REG_EXTENDED);
     if(regerr) {
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return NULL;
     }
     regex_t regl;
     regerr = regcomp(&regl,"^(\\s)*[1-9](<-[XO])(\\s)*$",REG_EXTENDED);
     if(regerr) {
         regfree(&regs);
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return NULL;
     }
 
@@ -212,7 +215,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
             if(thisrole != unparse_spot(*tp)) {
                 regfree(&regl);
                 regfree(&regs);
-                pthread_mutex_unlock(&lockg);
+                pthread_mutex_unlock(&game->lockg);
                 return NULL;
             }
         }
@@ -224,7 +227,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
         new->spot = spot;
         regfree(&regl);
         regfree(&regs);
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return new;
     }
     if((val = regexec(&regs,str,0,NULL,0)) == 0) {
@@ -235,7 +238,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
         if(thisrole == NULL_ROLE) {
             regfree(&regl);
             regfree(&regs);
-            pthread_mutex_unlock(&lockg);
+            pthread_mutex_unlock(&game->lockg);
             return NULL;
         }
         GAME_MOVE *new = calloc(1,sizeof(GAME_MOVE));
@@ -243,23 +246,21 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
         new->spot = spot;
         regfree(&regl);
         regfree(&regs);
-        pthread_mutex_unlock(&lockg);
+        pthread_mutex_unlock(&game->lockg);
         return new;
     }
     regfree(&regl);
     regfree(&regs);
-    pthread_mutex_unlock(&lockg);
+    pthread_mutex_unlock(&game->lockg);
     return NULL;
 }
 
 char *game_unparse_move(GAME_MOVE *move) {
     if(move == NULL) return NULL;
-    pthread_mutex_lock(&lockg);
     char *new = calloc(5,sizeof(char));
     new[0] = (move->spot)+49;
     new[1] = '<';
     new[2] = '-';
     new[3] = parse_spot(move->role);
-    pthread_mutex_unlock(&lockg);
     return new;
 }

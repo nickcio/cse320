@@ -14,11 +14,14 @@ typedef struct player{
     char *username;
     int ref;
     int rating;
+    pthread_mutex_t lockp;
+    pthread_mutex_t lock2;
 }PLAYER;
 
-pthread_mutex_t lockp;
-pthread_mutex_t lock2;
+
 PLAYER *player_create(char *name) {
+    pthread_mutex_t lockp;
+    pthread_mutex_t lock2;
     pthread_mutex_init(&lockp,NULL);
     pthread_mutex_init(&lock2,NULL);
     if(name == NULL) return NULL;
@@ -29,6 +32,8 @@ PLAYER *player_create(char *name) {
     new->username = newname;
     new->ref=0;
     new->rating = PLAYER_INITIAL_RATING;
+    new->lockp = lockp;
+    new->lock2 = lock2;
     player_ref(new,"new player created");
     return new;
 }
@@ -44,10 +49,10 @@ PLAYER *player_create(char *name) {
  */
 PLAYER *player_ref(PLAYER *player, char *why) {
     if(player == NULL) return NULL;
-    pthread_mutex_lock(&lock2);
+    pthread_mutex_lock(&player->lock2);
     debug("PLAYER ref: %p, because: %s",player,why);
     player->ref++;
-    pthread_mutex_unlock(&lock2);
+    pthread_mutex_unlock(&player->lock2);
     return player;
 }
 
@@ -64,18 +69,18 @@ PLAYER *player_ref(PLAYER *player, char *why) {
  */
 void player_unref(PLAYER *player, char *why) {
     if(player != NULL) {
-        pthread_mutex_lock(&lock2);
+        pthread_mutex_lock(&player->lock2);
         debug("player %p ref: %s",player,why);
         player->ref--;
         if(player->ref == 0) {
             if(player->username != NULL) free(player->username);
             free(player);
-            pthread_mutex_unlock(&lock2);
-            pthread_mutex_destroy(&lockp);
-            pthread_mutex_destroy(&lock2);
+            pthread_mutex_unlock(&player->lock2);
+            pthread_mutex_destroy(&player->lockp);
+            pthread_mutex_destroy(&player->lock2);
         }
         else{
-            pthread_mutex_unlock(&lock2);
+            pthread_mutex_unlock(&player->lock2);
         }
     }
 }
@@ -124,7 +129,8 @@ int player_get_rating(PLAYER *player) {
  */
 void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
     if(player1 != NULL && player2 != NULL) {
-        pthread_mutex_lock(&lockp);
+        pthread_mutex_lock(&player1->lockp);
+        pthread_mutex_lock(&player2->lockp);
         int r1 = player_get_rating(player1);
         int r2 = player_get_rating(player2);
         double expo1 = (r2-r1)/400;
@@ -138,6 +144,7 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
         debug("player1: %d player2: %d",r1new,r2new);
         player1->rating = r1new;
         player2->rating = r2new;
-        pthread_mutex_unlock(&lockp);
+        pthread_mutex_unlock(&player1->lockp);
+        pthread_mutex_unlock(&player2->lockp);
     }
 }
