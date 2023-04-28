@@ -39,6 +39,7 @@ int main(int argc, char* argv[]){
         exit(EXIT_FAILURE);
     }
     int opt;
+    int gotp = 0;
     char *port = NULL;
     while((opt = getopt(argc,argv,"p:")) != -1) {
         switch(opt){
@@ -53,15 +54,15 @@ int main(int argc, char* argv[]){
                     op++;
                 }
                 debug("Valid port. optarg %s",optarg);
+                gotp = 1;
                 port = optarg;
                 break;
             default:
                 debug("Invalid input.");
-                exit(EXIT_FAILURE);
                 break;
         }
     }
-
+    if(!gotp) exit(EXIT_FAILURE);
     // Perform required initializations of the client_registry and
     // player_registry.
     client_registry = creg_init();
