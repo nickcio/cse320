@@ -32,14 +32,17 @@ static void sighup_handler();
  * Usage: jeux <port>
  */
 int main(int argc, char* argv[]){
+    // Perform required initializations of the client_registry and
+    // player_registry.
+    client_registry = creg_init();
+    player_registry = preg_init();
     // Option processing should be performed here.
     // Option '-p <port>' is required in order to specify the port number
     // on which the server should listen.
     if(argc != 3) {
-        exit(EXIT_FAILURE);
+        terminate(EXIT_FAILURE);
     }
     int opt;
-    int gotp = 0;
     char *port = NULL;
     while((opt = getopt(argc,argv,"p:")) != -1) {
         switch(opt){
@@ -49,24 +52,19 @@ int main(int argc, char* argv[]){
                 while(*op != '\0') {
                     if(!isdigit(*op)) {
                         debug("Invalid port.");
-                        exit(EXIT_FAILURE);
+                        terminate(EXIT_FAILURE);
                     }
                     op++;
                 }
                 debug("Valid port. optarg %s",optarg);
-                gotp = 1;
                 port = optarg;
                 break;
             default:
                 debug("Invalid input.");
+                terminate(EXIT_FAILURE);
                 break;
         }
     }
-    if(!gotp) exit(EXIT_FAILURE);
-    // Perform required initializations of the client_registry and
-    // player_registry.
-    client_registry = creg_init();
-    player_registry = preg_init();
 
     // TODO: Set up the server socket and enter a loop to accept connections
     // on this socket.  For each connection, a thread should be started to
@@ -93,14 +91,8 @@ int main(int argc, char* argv[]){
     while(1) {
         debug("X1");
         clientlen=sizeof(struct sockaddr_storage);
-        debug("X2");
         connfdp = Calloc(1,sizeof(int));
-        debug("X3");
         *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
-        if(*connfdp < 0) {
-            debug("X5");
-        }
-        debug("X4");
         Pthread_create(&tid, NULL, jeux_client_service, connfdp);
     }
 
@@ -130,6 +122,6 @@ void terminate(int status) {
 }
 
 void sighup_handler() {
-    debug("Sighup BRO");
+    debug("Sighup");
     terminate(EXIT_SUCCESS);
 }
