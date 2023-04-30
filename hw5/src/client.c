@@ -52,6 +52,7 @@ CLIENT *client_create(CLIENT_REGISTRY *creg, int fd) {
     new->player = NULL;
     new->lockc = lockc;
     new->lock2 = lock2;
+    client_ref(new,"created");
     return new;
 }
 
@@ -89,6 +90,7 @@ void client_unref(CLIENT *client, char *why) {
         debug("client %p ref: %s",client,why);
         client->ref--;
         if(client->ref==0) {
+            debug("Freeing client!");
             free(client);
             pthread_mutex_unlock(&client->lock2);
             pthread_mutex_destroy(&client->lockc);
@@ -303,7 +305,7 @@ int client_remove_invitation(CLIENT *client, INVITATION *inv) {
         return -1;
     }
     client->invs[ind] = NULL;
-    inv_unref(inv,"add inv");
+    inv_unref(inv,"remove inv");
     pthread_mutex_unlock(&client->lockc);
     return ind;
 }
@@ -336,7 +338,7 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
     }
     debug("IN INV 1");
     int s = client_add_invitation(source,inv);
-    inv_ref(inv,"source add inv");
+    //inv_ref(inv,"source add inv");
     if(s == -1) {
         pthread_mutex_unlock(&source->lockc);
         pthread_mutex_unlock(&target->lockc);
@@ -344,7 +346,7 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
     }
     debug("IN INV 2");
     int t = client_add_invitation(target,inv);
-    inv_ref(inv,"target add inv");
+    //inv_ref(inv,"target add inv");
     if(t == -1) {
         pthread_mutex_unlock(&source->lockc);
         pthread_mutex_unlock(&target->lockc);

@@ -69,7 +69,8 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
     pthread_mutex_lock(&cr->lock);
     CLIENT *new = client_create(cr,fd);
     cr->clients[cr->clientnum] = new;
-    new = client_ref(new,"reg");
+    //new = client_ref(new,"reg");
+    if(cr->clientnum == 0) P(&cr->sema);
     cr->clientnum++;
     pthread_mutex_unlock(&cr->lock);
     return new;
@@ -179,7 +180,10 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
+    debug("P in CREG WAIT FOR EMPTY!");
     P(&cr->sema);
+    debug("V in CREG WAIT FOR EMPTY!");
+    V(&cr->sema);
 }
 
 /*
