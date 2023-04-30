@@ -11,7 +11,7 @@
 
 typedef struct player_registry {
     int playercount;
-    PLAYER *players[MAX_CLIENTS];
+    PLAYER *players[MAX_CLIENTS*3];
     pthread_mutex_t lock;
 }PLAYER_REGISTRY;
 

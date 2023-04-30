@@ -39,7 +39,7 @@ INVITATION *inv_create(CLIENT *source, CLIENT *target, GAME_ROLE source_role, GA
     new->game = NULL;
     new->locki = locki;
     new->lock2 = lock2;
-    new = inv_ref(new,"creation");
+    //new = inv_ref(new,"creation");
     return new;
 }
 
@@ -55,9 +55,12 @@ INVITATION *inv_ref(INVITATION *inv, char *why) {
 void inv_unref(INVITATION *inv, char *why) {
     if(inv != NULL) {
         pthread_mutex_lock(&inv->lock2);
-        debug("invitation %p ref: %s",inv,why);
+        debug("invitation %p ref: %d to %d, %s",inv,inv->ref, inv->ref-1,why);
         inv->ref--;
         if(inv->ref == 0) {
+            game_unref(inv->game,"game inv free");
+            client_unref(inv->source,"source inv free");
+            client_unref(inv->target,"target inv free");
             free(inv);
             pthread_mutex_unlock(&inv->lock2);
             pthread_mutex_destroy(&inv->locki);
@@ -98,7 +101,6 @@ int inv_accept(INVITATION *inv) {
     GAME *newgame = game_create();
     if(newgame != NULL) {
         inv->game = newgame;
-        game_ref(newgame,"inv accept");
     }
     else {
         pthread_mutex_unlock(&inv->locki);
