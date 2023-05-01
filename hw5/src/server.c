@@ -139,10 +139,11 @@ void *jeux_client_service(void *arg) {
                     debug("OK2 %d",client_get_fd(cli));
                     fp = open_memstream(&buff,&size);
                     PLAYER** ps = players;
-                    while(*ps != NULL) {
+                    while(ps != NULL && *ps != NULL) {
                         debug("Stringx: %s\t%d\n",player_get_name(*ps),player_get_rating(*ps));
                         fprintf(fp,"%s\t%d\n",player_get_name(*ps),player_get_rating(*ps));
                         ps++;
+                        debug("POINTER: %p",*ps);
                     }
                     fflush(fp);
                     debug("String: %s, size: %ld",buff,size);

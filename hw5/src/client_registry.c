@@ -164,7 +164,7 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
         }
     }
     players[j] = NULL;
-    PLAYER **players2 = calloc(j,sizeof(PLAYER *));
+    PLAYER **players2 = calloc(j+1,sizeof(PLAYER *));
     memcpy(players2,players,(j)*sizeof(PLAYER *));
     //debug("player0: %s",player_get_name(players2[0]));
     pthread_mutex_unlock(&cr->lock);

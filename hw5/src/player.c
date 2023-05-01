@@ -13,7 +13,7 @@
 typedef struct player{
     char *username;
     int ref;
-    int rating;
+    double rating;
     pthread_mutex_t lockp;
     pthread_mutex_t lock2;
 }PLAYER;
@@ -105,7 +105,8 @@ char *player_get_name(PLAYER *player) {
  */
 int player_get_rating(PLAYER *player) {
     if(player == NULL) return -1;
-    return player->rating;
+    int rating = (int)(round(player->rating));
+    return rating;
 }
 
 /*
@@ -131,17 +132,17 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result) {
     if(player1 != NULL && player2 != NULL) {
         pthread_mutex_lock(&player1->lockp);
         pthread_mutex_lock(&player2->lockp);
-        int r1 = player_get_rating(player1);
-        int r2 = player_get_rating(player2);
+        double r1 = player_get_rating(player1);
+        double r2 = player_get_rating(player2);
         double expo1 = (r2-r1)/400;
         double expo2 = (r1-r2)/400;
         double s1 = result == 0 ? 0.5 : result == 1 ? 1 : 0;
         double s2 = 1-s1;
         double e1 = 1/(1 + pow(10,expo1));
         double e2 = 1/(1 + pow(10,expo2));
-        int r1new = (r1 + 32*(s1-e1));
-        int r2new = (r2 + 32*(s2-e2));
-        debug("player1: %d player2: %d",r1new,r2new);
+        double r1new = (r1 + 32*(s1-e1));
+        double r2new = (r2 + 32*(s2-e2));
+        debug("player1: %lf player2: %lf",r1new,r2new);
         player1->rating = r1new;
         player2->rating = r2new;
         pthread_mutex_unlock(&player1->lockp);
