@@ -85,7 +85,7 @@ PLAYER *preg_register(PLAYER_REGISTRY *preg, char *name) {
     }
     PLAYER *new = player_create(name);
     preg->players[firstnull] = new;
-    new = player_ref(new,"reg");
+    //new = player_ref(new,"reg");
     preg->playercount++;
     pthread_mutex_unlock(&preg->lock);
     return new;

@@ -275,11 +275,13 @@ int cli_find_inv(CLIENT *client, INVITATION *inv) {
 int client_add_invitation(CLIENT *client, INVITATION *inv) {
     if(client == NULL || inv == NULL) return -1;
     pthread_mutex_lock(&client->lockc);
+    debug("Find inv null 1");
     int ind = cli_find_inv_null(client);
     if(ind == -1) {
         pthread_mutex_unlock(&client->lockc);
         return -1;
     }
+    debug("Find inv null 2");
     client->invs[ind] = inv;
     inv_ref(inv,"add inv");
     pthread_mutex_unlock(&client->lockc);
