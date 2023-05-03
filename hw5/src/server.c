@@ -246,6 +246,8 @@ void *jeux_client_service(void *arg) {
     }
     payloaddone(ps);
     if(hdr != NULL) free(hdr);
+    client_logout(cli);
+    creg_unregister(client_registry,cli);
     debug("DONE");
     return NULL;
 }

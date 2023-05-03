@@ -58,10 +58,10 @@ void game_unref(GAME *game, char *why) {
         debug("game %p unref: %s",game,why);
         game->ref--;
         if(game->ref == 0) {
-            free(game);
             pthread_mutex_unlock(&game->lockr);
             pthread_mutex_destroy(&game->lockg);
             pthread_mutex_destroy(&game->lockr);
+            free(game);
         }
         else pthread_mutex_unlock(&game->lockr);
     }

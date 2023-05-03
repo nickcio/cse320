@@ -74,10 +74,10 @@ void player_unref(PLAYER *player, char *why) {
         player->ref--;
         if(player->ref == 0) {
             if(player->username != NULL) free(player->username);
-            free(player);
             pthread_mutex_unlock(&player->lock2);
             pthread_mutex_destroy(&player->lockp);
             pthread_mutex_destroy(&player->lock2);
+            free(player);
         }
         else{
             pthread_mutex_unlock(&player->lock2);

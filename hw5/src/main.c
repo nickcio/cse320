@@ -26,6 +26,10 @@ static void terminate(int status);
 void *thread(void *vargp);
 
 static void sighup_handler();
+static void sigpipe_handler();
+
+static int listenfd = 0;
+static int *connfdp = NULL;
 /*
  * "Jeux" game server.
  *
@@ -77,7 +81,17 @@ int main(int argc, char* argv[]){
     asighup.sa_sigaction = sighup_handler;
     asighup.sa_flags = SA_SIGINFO;
 
-    int listenfd, *connfdp;
+    sigaction(SIGHUP,&asighup,NULL);
+
+    struct sigaction asigpip;
+    memset(&asigpip, 0x00, sizeof(asigpip));
+    sigemptyset(&asigpip.sa_mask);
+    asigpip.sa_sigaction = sigpipe_handler;
+    asigpip.sa_flags = SA_SIGINFO;
+
+    sigaction(SIGPIPE,&asigpip,NULL);
+
+    //int listenfd, *connfdp;
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
     pthread_t tid;
@@ -95,7 +109,6 @@ int main(int argc, char* argv[]){
         *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
         Pthread_create(&tid, NULL, jeux_client_service, connfdp);
     }
-
     //fprintf(stderr, "You have to finish implementing main() before the Jeux server will function.\n");
 
     terminate(EXIT_FAILURE);
@@ -118,10 +131,19 @@ void terminate(int status) {
     preg_fini(player_registry);
 
     debug("%ld: Jeux server terminating", pthread_self());
+    if(listenfd != 0) close(listenfd);
+    if(connfdp != NULL) {
+        if(*connfdp > 2) close(*connfdp);
+        free(connfdp);
+    }
     exit(status);
 }
 
 void sighup_handler() {
     debug("Sighup");
     terminate(EXIT_SUCCESS);
+}
+
+void sigpipe_handler() {
+    debug("Sigpipe");
 }

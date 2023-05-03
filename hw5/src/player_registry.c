@@ -46,10 +46,14 @@ void preg_fini(PLAYER_REGISTRY *preg) {
                 if(preg->players[i] != NULL) player_unref(preg->players[i],"preg fini");
             }
         }
+        pthread_mutex_unlock(&preg->lock);
+        pthread_mutex_destroy(&preg->lock);
         free(preg);
     }
+    else{
     pthread_mutex_unlock(&preg->lock);
     pthread_mutex_destroy(&preg->lock);
+    }
 }
 
 /*
