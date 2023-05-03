@@ -61,10 +61,10 @@ void inv_unref(INVITATION *inv, char *why) {
             game_unref(inv->game,"game inv free");
             client_unref(inv->source,"source inv free");
             client_unref(inv->target,"target inv free");
-            free(inv);
             pthread_mutex_unlock(&inv->lock2);
             pthread_mutex_destroy(&inv->locki);
             pthread_mutex_destroy(&inv->lock2);
+            free(inv);
         }
         else pthread_mutex_unlock(&inv->lock2);
     }

@@ -45,10 +45,14 @@ void creg_fini(CLIENT_REGISTRY *cr) {
                 if(cr->clients[i] != NULL) client_unref(cr->clients[i],"creg fini");
             }
         }
+        pthread_mutex_unlock(&cr->lock);
+        pthread_mutex_destroy(&cr->lock);
         free(cr);
     }
+    else{
     pthread_mutex_unlock(&cr->lock);
     pthread_mutex_destroy(&cr->lock);
+    }
 }
 
 /*
@@ -91,24 +95,37 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
  */
 int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
     if(cr == NULL || client == NULL) return -1;
+    debug("Creg unregister! %p %p",cr,client);
     pthread_mutex_lock(&cr->lock);
+    debug("Creg unregister2! %p %p",cr,client);
     int i = 0;
     while(i < cr->clientnum) {
+        debug("Cru! %d %d",i,cr->clientnum);
         if(cr->clients[i] == client) {
             break;
         }
     }
+    debug("Creg unregister3! %p %p",cr,client);
     if(i == cr->clientnum) {
+        debug("Client not found!");
+        pthread_mutex_unlock(&cr->lock);
         return -1;
     }
     client_unref(client,"unreg");
     int j = i;
+    debug("Here2 %d %d",j,cr->clientnum-1);
     while(j < cr->clientnum-1) {
         cr->clients[j] = cr->clients[j+1];
+        j++;
     }
+    debug("Here3");
     cr->clientnum--;
     cr->clients[cr->clientnum] = NULL;
-    if(cr->clientnum == 0) V(&cr->sema);
+    debug("Client unregistered! %d",cr->clientnum);
+    if(cr->clientnum == 0) {
+        debug("Creg empty!");
+        V(&cr->sema);
+    }
     pthread_mutex_unlock(&cr->lock);
     return 0;
 }
@@ -197,10 +214,16 @@ void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
+    debug("%p Creg shutdown all",cr);
     pthread_mutex_lock(&cr->lock);
     for(int i = 0; i < cr->clientnum; i++) {
+        debug("%p Creg shutdown %d",cr,i);
         int fd = client_get_fd(cr->clients[i]);
-        if(fd != -1) shutdown(fd,SHUT_RD);
+        debug("%p Got fd %d",cr,fd);
+        if(fd != -1) {
+            debug("Shutting down client %d",fd);
+            shutdown(fd,SHUT_RD);
+        }
     }
     pthread_mutex_unlock(&cr->lock);
 }

@@ -27,7 +27,7 @@ PLAYER *player_create(char *name) {
     if(name == NULL) return NULL;
     char* newname = calloc(1,strlen(name)+1);
     memcpy(newname,name,strlen(name));
-    newname[strlen(name)] = '\0';
+    //newname[strlen(name)] = '\0';
     PLAYER *new = calloc(1,sizeof(PLAYER));
     new->username = newname;
     new->ref=0;
@@ -74,10 +74,10 @@ void player_unref(PLAYER *player, char *why) {
         player->ref--;
         if(player->ref == 0) {
             if(player->username != NULL) free(player->username);
-            free(player);
             pthread_mutex_unlock(&player->lock2);
             pthread_mutex_destroy(&player->lockp);
             pthread_mutex_destroy(&player->lock2);
+            free(player);
         }
         else{
             pthread_mutex_unlock(&player->lock2);

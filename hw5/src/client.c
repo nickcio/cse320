@@ -9,7 +9,7 @@
 #include <semaphore.h>
 #include "client.h"
 
-#define INVS_SIZE 512
+#define INVS_SIZE sizeof(uint8_t)<<8
 
 typedef struct client {
     int fd;
@@ -68,7 +68,7 @@ CLIENT *client_create(CLIENT_REGISTRY *creg, int fd) {
 CLIENT *client_ref(CLIENT *client, char *why) {
     if(client == NULL) return NULL;
     pthread_mutex_lock(&client->lock2);
-    debug("client %p ref: %s",client,why);
+    debug("client %p ref: %s sizeof invs: %lu",client,why,INVS_SIZE);
     client->ref++;
     pthread_mutex_unlock(&client->lock2);
     return client;
@@ -91,10 +91,22 @@ void client_unref(CLIENT *client, char *why) {
         client->ref--;
         if(client->ref==0) {
             debug("Freeing client!");
-            free(client);
+            if(client->player != NULL) player_unref(client->player, "client free");
+            for(int i = 0; i < INVS_SIZE; i++) {
+                if(client->invs[i] != NULL) {
+                    INVITATION *inv = client->invs[i];
+                    CLIENT *s = inv_get_source(inv);
+                    client_remove_invitation(s,inv);
+                    CLIENT *t = inv_get_target(inv);
+                    client_remove_invitation(t,inv);
+                }
+            }
             pthread_mutex_unlock(&client->lock2);
             pthread_mutex_destroy(&client->lockc);
             pthread_mutex_destroy(&client->lock2);
+            close(client->fd);
+            free(client);
+            debug("Client freed!");
         }
         else pthread_mutex_unlock(&client->lock2);
     }
@@ -136,6 +148,7 @@ int client_login(CLIENT *client, PLAYER *player) {
  * logged out, otherwise -1.
  */
 int client_logout(CLIENT *client) {
+    debug("LOGGING OUT CLIENT %d",client->fd);
     if(client == NULL || client->login == 0 || client->player == NULL) return -1;
     pthread_mutex_lock(&client->lockc);
     client->login = 0;
@@ -359,7 +372,7 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
     ack->type = JEUX_INVITED_PKT;
     ack->id = t;
     ack->role = 0;
-    ack->size = strlen(sname);
+    ack->size = strlen(sname)+1;
     struct timespec tspec;
     clock_gettime(CLOCK_MONOTONIC,&tspec);
     ack->timestamp_sec = tspec.tv_sec;
@@ -538,7 +551,7 @@ int client_accept_invitation(CLIENT *client, int id, char **strp) {
     }
     size_t size = 0;
     *strp = game_unparse_state(inv_get_game(inv));
-    if(strp != NULL && *strp != NULL) size = strlen(*strp);
+    if(strp != NULL && *strp != NULL) size = strlen(*strp)+1;
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_ACCEPTED_PKT;
     int ind = cli_find_inv(source,inv);
@@ -639,6 +652,17 @@ int client_resign_game(CLIENT *client, int id) {
     ack->timestamp_sec = tspec.tv_sec;
     ack->timestamp_nsec = tspec.tv_nsec;
     int status2 = client_send_packet(opp,ack,NULL);
+
+    int winner = game_get_winner(inv_get_game(inv));
+    int sr = inv_get_source_role(inv);
+    PLAYER *sp = client_get_player(source);
+    PLAYER *tp = client_get_player(target);
+    if(sr == FIRST_PLAYER_ROLE) player_post_result(sp,tp,winner);
+    else player_post_result(tp,sp,winner);
+
+    client_remove_invitation(source,inv);
+    client_remove_invitation(target,inv);
+    
     if(ack != NULL) free(ack);
     pthread_mutex_unlock(&client->lockc);
     if(status2 == -1) return -1;
@@ -710,7 +734,7 @@ int client_make_move(CLIENT *client, int id, char *move) {
         ack->type = JEUX_MOVED_PKT;
         ack->id = ind;
         ack->role = 0;
-        ack->size = strlen(state);
+        ack->size = strlen(state)+1;
         struct timespec tspec;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
         ack->timestamp_sec = tspec.tv_sec;

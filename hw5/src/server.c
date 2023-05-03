@@ -206,7 +206,7 @@ void *jeux_client_service(void *arg) {
                         debug("Start.");
                         debug("START: %s",start);
                         size_t sizer = 0;
-                        if(start != NULL) sizer = strlen(start);
+                        if(start != NULL) sizer = strlen(start)+1;
                         clientsendpack(cli,hdr,(void**)&start,JEUX_ACK_PKT,sizer,0,0);
                         if(start != NULL) free(start);
                     }
@@ -246,6 +246,8 @@ void *jeux_client_service(void *arg) {
     }
     payloaddone(ps);
     if(hdr != NULL) free(hdr);
+    client_logout(cli);
+    creg_unregister(client_registry,cli);
     debug("DONE");
     return NULL;
 }

@@ -58,10 +58,10 @@ void game_unref(GAME *game, char *why) {
         debug("game %p unref: %s",game,why);
         game->ref--;
         if(game->ref == 0) {
-            free(game);
             pthread_mutex_unlock(&game->lockr);
             pthread_mutex_destroy(&game->lockg);
             pthread_mutex_destroy(&game->lockr);
+            free(game);
         }
         else pthread_mutex_unlock(&game->lockr);
     }
@@ -190,10 +190,14 @@ GAME_ROLE game_get_winner(GAME *game) {
 GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
     if(game == NULL) return NULL;
     pthread_mutex_lock(&game->lockg);
+    char *newstr = calloc(1,strlen(str)+1);
+    memcpy(newstr,str,strlen(str));
+    str = newstr;
     regex_t regs;
     int regerr = regcomp(&regs,"^(\\s)*[1-9](\\s)*$",REG_EXTENDED);
     if(regerr) {
         pthread_mutex_unlock(&game->lockg);
+        free(str);
         return NULL;
     }
     regex_t regl;
@@ -201,6 +205,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
     if(regerr) {
         regfree(&regs);
         pthread_mutex_unlock(&game->lockg);
+        free(str);
         return NULL;
     }
 
@@ -216,6 +221,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
                 regfree(&regl);
                 regfree(&regs);
                 pthread_mutex_unlock(&game->lockg);
+                free(str);
                 return NULL;
             }
         }
@@ -228,6 +234,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
         regfree(&regl);
         regfree(&regs);
         pthread_mutex_unlock(&game->lockg);
+        free(str);
         return new;
     }
     if((val = regexec(&regs,str,0,NULL,0)) == 0) {
@@ -239,6 +246,7 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
             regfree(&regl);
             regfree(&regs);
             pthread_mutex_unlock(&game->lockg);
+            free(str);
             return NULL;
         }
         GAME_MOVE *new = calloc(1,sizeof(GAME_MOVE));
@@ -247,11 +255,13 @@ GAME_MOVE *game_parse_move(GAME *game, GAME_ROLE role, char *str) {
         regfree(&regl);
         regfree(&regs);
         pthread_mutex_unlock(&game->lockg);
+        free(str);
         return new;
     }
     regfree(&regl);
     regfree(&regs);
     pthread_mutex_unlock(&game->lockg);
+    free(str);
     return NULL;
 }
 
