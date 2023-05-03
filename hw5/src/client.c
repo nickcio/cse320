@@ -104,6 +104,7 @@ void client_unref(CLIENT *client, char *why) {
             pthread_mutex_unlock(&client->lock2);
             pthread_mutex_destroy(&client->lockc);
             pthread_mutex_destroy(&client->lock2);
+            close(client->fd);
             free(client);
             debug("Client freed!");
         }
@@ -371,7 +372,7 @@ int client_make_invitation(CLIENT *source, CLIENT *target,GAME_ROLE source_role,
     ack->type = JEUX_INVITED_PKT;
     ack->id = t;
     ack->role = 0;
-    ack->size = strlen(sname);
+    ack->size = strlen(sname)+1;
     struct timespec tspec;
     clock_gettime(CLOCK_MONOTONIC,&tspec);
     ack->timestamp_sec = tspec.tv_sec;
@@ -550,7 +551,7 @@ int client_accept_invitation(CLIENT *client, int id, char **strp) {
     }
     size_t size = 0;
     *strp = game_unparse_state(inv_get_game(inv));
-    if(strp != NULL && *strp != NULL) size = strlen(*strp);
+    if(strp != NULL && *strp != NULL) size = strlen(*strp)+1;
     JEUX_PACKET_HEADER *ack = calloc(1,sizeof(JEUX_PACKET_HEADER));
     ack->type = JEUX_ACCEPTED_PKT;
     int ind = cli_find_inv(source,inv);
@@ -733,7 +734,7 @@ int client_make_move(CLIENT *client, int id, char *move) {
         ack->type = JEUX_MOVED_PKT;
         ack->id = ind;
         ack->role = 0;
-        ack->size = strlen(state);
+        ack->size = strlen(state)+1;
         struct timespec tspec;
         clock_gettime(CLOCK_MONOTONIC,&tspec);
         ack->timestamp_sec = tspec.tv_sec;

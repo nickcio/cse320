@@ -222,8 +222,7 @@ void creg_shutdown_all(CLIENT_REGISTRY *cr) {
         debug("%p Got fd %d",cr,fd);
         if(fd != -1) {
             debug("Shutting down client %d",fd);
-            int suc = shutdown(fd,SHUT_RD);
-            debug("Success? %d",suc);
+            shutdown(fd,SHUT_RD);
         }
     }
     pthread_mutex_unlock(&cr->lock);

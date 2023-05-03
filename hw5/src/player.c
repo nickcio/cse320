@@ -27,7 +27,7 @@ PLAYER *player_create(char *name) {
     if(name == NULL) return NULL;
     char* newname = calloc(1,strlen(name)+1);
     memcpy(newname,name,strlen(name));
-    newname[strlen(name)] = '\0';
+    //newname[strlen(name)] = '\0';
     PLAYER *new = calloc(1,sizeof(PLAYER));
     new->username = newname;
     new->ref=0;
