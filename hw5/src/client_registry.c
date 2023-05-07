@@ -142,10 +142,13 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
  */
 CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
     pthread_mutex_lock(&cr->lock);
+    debug("Clients cr %p",cr->clients);
     for(int i = 0; i < cr->clientnum; i++) {
         CLIENT *curr = cr->clients[i];
+        debug("Current client %p",cr->clients[i]);
         char *currname = player_get_name(client_get_player(curr));
-        if(strcmp(currname,user) == 0) {
+        debug("Current client name %s %p",currname,currname);
+        if(currname != NULL && strcmp(currname,user) == 0) {
             pthread_mutex_unlock(&cr->lock);
             return curr;
         }
