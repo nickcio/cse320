@@ -654,6 +654,37 @@ int client_resign_game(CLIENT *client, int id) {
     int status2 = client_send_packet(opp,ack,NULL);
 
     int winner = game_get_winner(inv_get_game(inv));
+
+    JEUX_PACKET_HEADER *ack2 = calloc(1,sizeof(JEUX_PACKET_HEADER));
+    ack2->type = JEUX_ENDED_PKT;
+    ack2->id = cli_find_inv(source,inv);
+    ack2->role = winner;
+    ack2->size = 0;
+    clock_gettime(CLOCK_MONOTONIC,&tspec);
+    ack2->timestamp_sec = tspec.tv_sec;
+    ack2->timestamp_nsec = tspec.tv_nsec;
+    int status3 = client_send_packet(source,ack2,NULL);
+    if(ack2 != NULL) free(ack2);
+    if(status3 == -1) {
+        pthread_mutex_unlock(&client->lockc);
+        return -1;
+    }
+
+    JEUX_PACKET_HEADER *ack3 = calloc(1,sizeof(JEUX_PACKET_HEADER));
+    ack3->type = JEUX_ENDED_PKT;
+    ack3->id = cli_find_inv(target,inv);
+    ack3->role = winner;
+    ack3->size = 0;
+    clock_gettime(CLOCK_MONOTONIC,&tspec);
+    ack3->timestamp_sec = tspec.tv_sec;
+    ack3->timestamp_nsec = tspec.tv_nsec;
+    int status4 = client_send_packet(target,ack3,NULL);
+    if(ack3 != NULL) free(ack3);
+    if(status4 == -1) {
+        pthread_mutex_unlock(&client->lockc);
+        return -1;
+    }
+
     int sr = inv_get_source_role(inv);
     PLAYER *sp = client_get_player(source);
     PLAYER *tp = client_get_player(target);
